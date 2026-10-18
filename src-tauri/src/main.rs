@@ -204,4 +204,33 @@ mod tests {
         assert_eq!((i.width, i.height, i.codec.as_str()), (1920, 1080, "h264"));
         assert!((i.duration - 62.5).abs() < 1e-9);
     }
+
+    // Runs every mode through real ffmpeg (needs ffmpeg on PATH): cargo test -- --ignored
+    #[test]
+    #[ignore]
+    fn encodes_all_modes() {
+        let dir = std::env::temp_dir().join("squeeze_test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let src = dir.join("src.mp4").to_string_lossy().to_string();
+        let ok = ffmpeg()
+            .args(["-y", "-f", "lavfi", "-i", "testsrc2=size=1280x720:rate=30:duration=6", "-f", "lavfi", "-i", "sine=duration=6", "-c:v", "libx264", "-crf", "10", "-shortest", &src])
+            .status().unwrap().success();
+        assert!(ok);
+        let src_size = probe(src.clone()).unwrap().size;
+        for (mode, codec, ext) in [("crf", "h264", "mp4"), ("crf", "h265", "mp4"), ("target", "h264", "mp4"), ("target", "h265", "mp4"), ("lossless", "h264", "mkv")] {
+            let out = dir.join(format!("{mode}_{codec}.{ext}")).to_string_lossy().to_string();
+            let o = Opts { input: src.clone(), output: out.clone(), mode: mode.into(), codec: codec.into(), crf: 28, target_mb: 0.5, height: 480 };
+            for args in build_passes(&o, 6.0) {
+                let st = ffmpeg().args(&args).current_dir(&dir).output().unwrap();
+                assert!(st.status.success(), "{mode} {codec}: {}", String::from_utf8_lossy(&st.stderr));
+            }
+            let i = probe(out).unwrap();
+            assert_eq!(i.height, 480, "{mode} {codec}");
+            if mode == "target" {
+                let mb = i.size as f64 / 1048576.0;
+                assert!((0.35..=0.6).contains(&mb), "{codec} target 0.5MB got {mb}");
+            }
+            if mode == "crf" { assert!(i.size < src_size); }
+        }
+    }
 }
