@@ -3,74 +3,110 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Video Compressor</title>
+<title>Squeeze</title>
 <style>
-:root{--bg:#f5f6f8;--card:#ffffff;--border:#e2e4e9;--text:#1c1d21;--muted:#6b7080;--accent:#4f46e5;--accent-soft:#eceefe;--danger:#c81e1e;--radius:12px}
-@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#15161a;--card:#1e2026;--border:#2e3038;--text:#eceef3;--muted:#9097a6;--accent:#818cf8;--accent-soft:#262849;--danger:#f87171}}
-:root[data-theme="dark"]{--bg:#15161a;--card:#1e2026;--border:#2e3038;--text:#eceef3;--muted:#9097a6;--accent:#818cf8;--accent-soft:#262849;--danger:#f87171}
+:root{--bg:#f6f7f9;--panel:#fff;--panel2:#f1f2f5;--border:#e3e5ea;--text:#16171b;--muted:#6a6f7d;--accent:#5b5bf0;--accent-2:#7c6cf6;--accent-soft:rgba(91,91,240,.08);--ok:#16a34a;--warn:#c27803;--slow:#dc2626;--danger:#dc2626;--shadow:0 1px 2px rgba(16,18,27,.05),0 4px 16px rgba(16,18,27,.04)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#0f1014;--panel:#17181d;--panel2:#202229;--border:#272930;--text:#eceef3;--muted:#8b91a0;--accent:#7b7bff;--accent-2:#9a8cff;--accent-soft:rgba(123,123,255,.11);--ok:#4ade80;--warn:#fbbf24;--slow:#f87171;--danger:#f87171;--shadow:none}}
+:root[data-theme="dark"]{--bg:#0f1014;--panel:#17181d;--panel2:#202229;--border:#272930;--text:#eceef3;--muted:#8b91a0;--accent:#7b7bff;--accent-2:#9a8cff;--accent-soft:rgba(123,123,255,.11);--ok:#4ade80;--warn:#fbbf24;--slow:#f87171;--danger:#f87171;--shadow:none}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:14px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;min-height:100vh}
-main{max-width:680px;margin:0 auto;padding:20px 20px 24px;display:flex;flex-direction:column;gap:14px}
-h1{font-size:18px;font-weight:600;margin:0}
-.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 "Segoe UI Variable Text","Segoe UI",system-ui,-apple-system,Roboto,sans-serif;-webkit-font-smoothing:antialiased;user-select:none;display:flex;flex-direction:column}
+main{flex:1;overflow:auto;padding:22px 28px 18px}
+.wrap{max-width:804px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+header{display:flex;align-items:center;gap:10px}
+.logo{width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,var(--accent),var(--accent-2));display:grid;place-items:center}
+h1{font-size:16px;font-weight:650;margin:0;letter-spacing:-.01em}
+.sub{color:var(--muted);font-size:12.5px;margin-left:auto}
 .hidden{display:none!important}
-#dropzone{text-align:center;padding:36px 16px;color:var(--muted);cursor:pointer;border-style:dashed;transition:.15s}
-#dropzone:hover,#dropzone.over{border-color:var(--accent);background:var(--accent-soft);color:var(--text)}
-#fileCard{display:flex;justify-content:space-between;align-items:center;gap:12px}
-.name{font-weight:600;word-break:break-all}
-.meta{color:var(--muted);font-size:12.5px;margin-top:2px}
-button,select,input{font:inherit}
-button{cursor:pointer;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);padding:8px 14px}
-button:disabled{opacity:.5;cursor:default}
-button.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600;padding:10px 22px}
-button.link{border:0;background:none;color:var(--accent);padding:0}
-#presets{display:grid;grid-template-columns:repeat(auto-fit,minmax(128px,1fr));gap:10px}
-.preset{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:12px;cursor:pointer;display:flex;flex-direction:column;gap:6px;outline:none}
-.preset:focus-visible{box-shadow:0 0 0 2px var(--accent)}
-.preset.sel{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent);background:var(--accent-soft)}
-.top{display:flex;justify-content:space-between;align-items:center;gap:6px}
+.label{font-size:11.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:4px 2px -6px}
+#dropzone{border:1.5px dashed var(--border);border-radius:14px;padding:38px 16px;text-align:center;cursor:pointer;transition:border-color .15s,background .15s;background:var(--panel)}
+#dropzone:hover,#dropzone:focus-visible,#dropzone.over{border-color:var(--accent);background:var(--accent-soft);outline:none}
+#dropzone svg{color:var(--accent);margin-bottom:8px}
+.dz-title{font-size:15px;font-weight:600}
+.dz-sub{color:var(--muted);font-size:12.5px;margin-top:4px}
+#fileCard{display:flex;align-items:center;gap:14px;background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:14px 16px;box-shadow:var(--shadow)}
+.thumb{width:42px;height:42px;border-radius:10px;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;flex:none}
+.fileinfo{min-width:0;flex:1}
+.name{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.meta{color:var(--muted);font-size:12.5px;margin-top:2px;display:flex;gap:6px;flex-wrap:wrap}
+.meta span+span::before{content:"·";margin-right:6px;opacity:.6}
+button,select,input{font:inherit;color:inherit}
+button{cursor:pointer;border-radius:9px;border:1px solid var(--border);background:var(--panel);padding:8px 14px;transition:background .15s,filter .15s,transform .05s}
+button:hover:not(:disabled){background:var(--panel2)}
+button:active:not(:disabled){transform:translateY(1px)}
+button:disabled{opacity:.45;cursor:default}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button.primary{background:var(--accent);border-color:transparent;color:#fff;font-weight:600;padding:10px 26px;min-width:150px}
+button.primary:hover:not(:disabled){background:var(--accent);filter:brightness(1.08)}
+#presets{display:flex;flex-direction:column;gap:8px}
+.preset{display:grid;grid-template-columns:20px 1fr auto 100px;align-items:center;gap:14px;background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:13px 16px;cursor:pointer;outline:none;transition:border-color .15s,background .15s}
+.preset:hover{border-color:color-mix(in srgb,var(--accent) 45%,var(--border))}
+.preset:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.preset.sel{border-color:var(--accent);background:var(--accent-soft)}
+.radio{width:18px;height:18px;border-radius:50%;border:1.5px solid var(--border);display:grid;place-items:center}
+.preset.sel .radio{border-color:var(--accent)}
+.preset.sel .radio::after{content:"";width:9px;height:9px;border-radius:50%;background:var(--accent)}
 .pname{font-weight:600}
-.pdesc{color:var(--muted);font-size:12px;min-height:2.6em}
-.est{font-size:12.5px;font-variant-numeric:tabular-nums}
-.badge{font-size:11px;padding:2px 7px;border-radius:99px;font-weight:600}
-.badge.fast{background:rgba(22,163,74,.15);color:#16a34a}
-.badge.medium{background:rgba(217,119,6,.15);color:#d97706}
-.badge.slow{background:rgba(220,38,38,.15);color:#dc2626}
-.tgt{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted)}
-.tgt input{width:72px;padding:4px 6px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text)}
-.advanced{display:flex;gap:16px;align-items:center;color:var(--muted);font-size:13px;flex-wrap:wrap}
-.advanced label{display:flex;gap:6px;align-items:center}
-select{padding:4px 6px;border-radius:6px;border:1px solid var(--border);background:var(--card);color:var(--text)}
-.actions{display:flex;gap:10px;justify-content:flex-end;align-items:center}
-.bar{height:8px;background:var(--border);border-radius:99px;overflow:hidden}
-#fill{height:100%;width:0;background:var(--accent);transition:width .4s}
-.row{display:flex;justify-content:space-between;font-size:12.5px;color:var(--muted);margin-top:8px;font-variant-numeric:tabular-nums}
-#result{display:flex;justify-content:space-between;align-items:center;gap:12px;font-weight:600}
-.error{color:var(--danger);font-size:13px}
+.pdesc{color:var(--muted);font-size:12.5px}
+.est{font-variant-numeric:tabular-nums;font-weight:600;text-align:right}
+.est small{display:block;font-weight:400;color:var(--muted);font-size:11.5px}
+.badge{font-size:11px;padding:3px 8px;border-radius:99px;font-weight:600;min-width:62px;text-align:center}
+.badge.fast{background:color-mix(in srgb,var(--ok) 14%,transparent);color:var(--ok)}
+.badge.medium{background:color-mix(in srgb,var(--warn) 14%,transparent);color:var(--warn)}
+.badge.slow{background:color-mix(in srgb,var(--slow) 14%,transparent);color:var(--slow)}
+.tgt{display:inline-flex;align-items:center;gap:6px;margin-top:6px;color:var(--muted);font-size:12.5px}
+.tgt input{width:84px;padding:5px 8px;border-radius:8px;border:1px solid var(--border);background:var(--bg)}
+.advanced{display:flex;gap:18px;align-items:center;color:var(--muted);font-size:13px;flex-wrap:wrap;padding:0 2px}
+.advanced label{display:flex;gap:8px;align-items:center}
+select{padding:6px 10px;border-radius:8px;border:1px solid var(--border);background:var(--panel);cursor:pointer}
+option{background:var(--panel)}
+footer{border-top:1px solid var(--border);background:var(--panel);padding:14px 28px}
+.foot{max-width:804px;margin:0 auto;display:flex;align-items:center;gap:12px}
+.status{flex:1;min-width:0}
+.bar{height:6px;background:var(--panel2);border-radius:99px;overflow:hidden}
+#fill{height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--accent-2));border-radius:99px;transition:width .4s}
+.row{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-top:6px;font-variant-numeric:tabular-nums}
+#idle{color:var(--muted);font-size:13px}
+#result{display:flex;align-items:center;gap:10px;font-weight:600;min-width:0}
+#result .ok{width:22px;height:22px;border-radius:50%;background:color-mix(in srgb,var(--ok) 16%,transparent);color:var(--ok);display:grid;place-items:center;flex:none}
+#resText{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#reveal{padding:6px 12px;font-weight:500;font-size:13px}
+.error{color:var(--danger);font-size:13px;background:color-mix(in srgb,var(--danger) 9%,transparent);border:1px solid color-mix(in srgb,var(--danger) 25%,transparent);border-radius:10px;padding:10px 12px;white-space:pre-wrap;user-select:text}
 .busy #dropzone,.busy .preset,.busy #change{pointer-events:none;opacity:.6}
+@media (max-width:560px){main{padding:16px}footer{padding:12px 16px}.preset{grid-template-columns:20px 1fr 84px}.badge{display:none}}
 </style>
 </head>
 <body>
-<main>
-  <h1>Video Compressor</h1>
+<main><div class="wrap">
+  <header>
+    <div class="logo"><svg width="14" height="14" viewBox="0 0 24 24" fill="#fff"><path d="M8 5v14l11-7z"/></svg></div>
+    <h1>Squeeze</h1>
+    <span class="sub">Video compressor</span>
+  </header>
 
-  <section id="dropzone" class="card" tabindex="0">Drop a video here or click to browse</section>
+  <section id="dropzone" tabindex="0" role="button" aria-label="Choose a video">
+    <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4m0 0L8 8m4-4 4 4"/><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>
+    <div class="dz-title">Drop a video here</div>
+    <div class="dz-sub">or click to browse · MP4, MKV, MOV, AVI, WebM</div>
+  </section>
 
-  <section id="fileCard" class="card hidden">
-    <div>
+  <section id="fileCard" class="hidden">
+    <div class="thumb"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="3" y="5" width="13" height="14" rx="2"/><path d="m16 10 5-3v10l-5-3z"/></svg></div>
+    <div class="fileinfo">
       <div id="fName" class="name"></div>
       <div id="fMeta" class="meta"></div>
     </div>
-    <button id="change" class="link">change</button>
+    <button id="change">Change</button>
   </section>
 
-  <section id="presets"></section>
+  <div class="label">Compression</div>
+  <section id="presets" role="radiogroup" aria-label="Compression preset"></section>
 
   <section class="advanced">
     <label>Codec
       <select id="codec">
-        <option value="h264">H.264</option>
-        <option value="h265">H.265</option>
+        <option value="h264">H.264 · plays everywhere</option>
+        <option value="h265">H.265 · smaller files</option>
       </select>
     </label>
     <label>Resolution
@@ -83,23 +119,27 @@ select{padding:4px 6px;border-radius:6px;border:1px solid var(--border);backgrou
     </label>
   </section>
 
-  <div class="actions">
+  <div id="error" class="error hidden" role="alert"></div>
+</div></main>
+
+<footer>
+  <div class="foot">
+    <div class="status">
+      <div id="idle">Choose a video to get started</div>
+      <div id="progress" class="hidden">
+        <div class="bar"><div id="fill"></div></div>
+        <div class="row"><span id="pct">0%</span><span id="time"></span></div>
+      </div>
+      <div id="result" class="hidden">
+        <span class="ok"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"/></svg></span>
+        <span id="resText"></span>
+        <button id="reveal">Show in folder</button>
+      </div>
+    </div>
     <button id="cancel" class="hidden">Cancel</button>
     <button id="go" class="primary" disabled>Compress</button>
   </div>
-
-  <section id="progress" class="card hidden">
-    <div class="bar"><div id="fill"></div></div>
-    <div class="row"><span id="pct">0%</span><span id="time"></span></div>
-  </section>
-
-  <section id="result" class="card hidden">
-    <span id="resText"></span>
-    <button id="reveal">Show in folder</button>
-  </section>
-
-  <div id="error" class="error hidden"></div>
-</main>
+</footer>
 
 <script>
 (() => {
@@ -108,18 +148,18 @@ select{padding:4px 6px;border-radius:6px;border:1px solid var(--border);backgrou
   const $ = id => document.getElementById(id);
   const VIDEO = ['mp4','mkv','mov','avi','webm','m4v','wmv','flv'];
   const MB = 1048576;
+  // ponytail: ratios are rough rules of thumb, real size depends on content
   const PRESETS = {
-    target:   { mode:'target', speed:'slow',   name:'Target size', desc:'Fit a chosen file size' },
-    high:     { mode:'crf', codec:'h264', crf:20, ratio:0.6,  speed:'slow',   name:'High quality', desc:'Near-original look' },
-    balanced: { mode:'crf', codec:'h265', crf:26, ratio:0.3,  speed:'medium', name:'Balanced', desc:'Good quality, small file' },
-    smallest: { mode:'crf', codec:'h265', crf:32, ratio:0.12, speed:'fast',   name:'Smallest', desc:'Tiny file, 720p max' },
-    lossless: { mode:'lossless', codec:'h264', speed:'medium', name:'Lossless', desc:'Archival, no quality loss' }
+    target:   { mode:'target', speed:'slow', name:'Target size', desc:'Hit an exact file size (two-pass)' },
+    high:     { mode:'crf', codec:'h264', crf:20, ratio:0.6,  speed:'medium', name:'High quality', desc:'Visually near-identical' },
+    balanced: { mode:'crf', codec:'h265', crf:26, ratio:0.3,  speed:'medium', name:'Balanced', desc:'Great quality, much smaller' },
+    smallest: { mode:'crf', codec:'h265', crf:32, ratio:0.1, speed:'fast', name:'Smallest', desc:'Tiny file, up to 720p' },
+    lossless: { mode:'lossless', codec:'h264', speed:'fast', name:'Lossless', desc:'Bit-perfect picture, for archiving or editing' }
   };
 
   let src = null, sel = 'balanced', busy = false, outPath = null;
   let start = 0, prog = 0, timer = null;
 
-  // Build preset cards
   const grid = $('presets');
   for (const [id, p] of Object.entries(PRESETS)) {
     const el = document.createElement('div');
@@ -128,14 +168,15 @@ select{padding:4px 6px;border-radius:6px;border:1px solid var(--border);backgrou
     el.setAttribute('role', 'radio');
     el.tabIndex = 0;
     const label = p.speed[0].toUpperCase() + p.speed.slice(1);
-    el.innerHTML = `<div class="top"><span class="pname">${p.name}</span><span class="badge ${p.speed}">${label}</span></div>
-      <div class="pdesc">${p.desc}</div>
-      ${id === 'target' ? '<label class="tgt"><input id="tmb" type="number" min="0.1" step="0.1" value="25"> MB</label>' : ''}
+    el.innerHTML = `<span class="radio"></span>
+      <div><div class="pname">${p.name}</div><div class="pdesc">${p.desc}</div>
+      ${id === 'target' ? '<label class="tgt">Size <input id="tmb" type="number" min="0.1" step="0.5" value="25"> MB</label>' : ''}</div>
+      <span class="badge ${p.speed}">${label}</span>
       <div class="est"></div>`;
     grid.append(el);
   }
 
-  const fmtMB = b => (b / MB).toFixed(1) + ' MB';
+  const fmtMB = b => { const m = b / MB; return (m >= 1024 ? (m / 1024).toFixed(2) + ' GB' : m.toFixed(m < 10 ? 1 : 0) + ' MB'); };
   const fmtDur = s => {
     s = Math.round(s);
     const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = s % 60;
@@ -143,12 +184,17 @@ select{padding:4px 6px;border-radius:6px;border:1px solid var(--border);backgrou
   };
   const showError = e => { const el = $('error'); el.textContent = String(e?.message || e); el.classList.remove('hidden'); };
   const clearError = () => $('error').classList.add('hidden');
+  const footer = state => ['idle', 'progress', 'result'].forEach(id => $(id).classList.toggle('hidden', id !== state));
 
   function estimate(id) {
-    if (id === 'lossless') return 'Larger than source (archival)';
-    if (!src) return '~ —';
-    if (id === 'target') return '~' + (+$('tmb').value || 0).toFixed(1) + ' MB';
-    return '~' + fmtMB(src.size * PRESETS[id].ratio);
+    if (id === 'lossless') return 'Larger<small>than source</small>';
+    if (!src) return '—';
+    const pct = b => `<small>${Math.round(b / src.size * 100)}% of original</small>`;
+    if (id === 'target') { const b = (+$('tmb').value || 0) * MB; return fmtMB(b) + pct(b); }
+    let b = src.size * PRESETS[id].ratio;
+    const h = +$('res').value;
+    if (h && h < src.height) b *= (h / src.height) ** 1.5;
+    return '~' + fmtMB(b) + pct(b);
   }
 
   function renderCards() {
@@ -156,7 +202,7 @@ select{padding:4px 6px;border-radius:6px;border:1px solid var(--border);backgrou
       const on = el.dataset.id === sel;
       el.classList.toggle('sel', on);
       el.setAttribute('aria-checked', on);
-      el.querySelector('.est').textContent = estimate(el.dataset.id);
+      el.querySelector('.est').innerHTML = estimate(el.dataset.id);
     });
   }
 
@@ -175,7 +221,7 @@ select{padding:4px 6px;border-radius:6px;border:1px solid var(--border);backgrou
     const p = PRESETS[id];
     if (p.codec) $('codec').value = p.codec;
     if (id === 'smallest') $('res').value = (!src || src.height > 720) ? '720' : '0';
-    if (id === 'lossless') $('res').value = '0';
+    else if (id !== 'target') $('res').value = '0';
     renderCards();
     updateControls();
   }
@@ -193,7 +239,7 @@ select{padding:4px 6px;border-radius:6px;border:1px solid var(--border);backgrou
     $('fill').style.width = (prog * 100).toFixed(1) + '%';
     $('pct').textContent = Math.round(prog * 100) + '%';
     const eta = prog > 0.01 ? el / prog * (1 - prog) : null;
-    $('time').textContent = `Elapsed ${fmtDur(el)}` + (eta != null ? ` · ETA ${fmtDur(eta)}` : '');
+    $('time').textContent = `Elapsed ${fmtDur(el)}` + (eta != null ? ` · ${fmtDur(eta)} left` : '');
   }
 
   async function load(path) {
@@ -203,11 +249,15 @@ select{padding:4px 6px;border-radius:6px;border:1px solid var(--border);backgrou
       const info = await invoke('probe', { path });
       src = { ...info, path };
       $('fName').textContent = path.split(/[\\/]/).pop();
-      $('fMeta').textContent = `${fmtMB(src.size)} · ${src.width}×${src.height} · ${fmtDur(src.duration)} · ${src.codec}`;
+      $('fMeta').innerHTML = '';
+      for (const t of [fmtMB(src.size), `${src.width}×${src.height}`, fmtDur(src.duration), src.codec.toUpperCase()]) {
+        const s = document.createElement('span'); s.textContent = t; $('fMeta').append(s);
+      }
       $('fileCard').classList.remove('hidden');
       $('dropzone').classList.add('hidden');
-      $('result').classList.add('hidden');
-      $('tmb').value = (src.size / MB * 0.25).toFixed(1);
+      footer('idle');
+      $('idle').textContent = 'Pick a preset, then compress';
+      $('tmb').value = Math.max(1, Math.round(src.size / MB * 0.25));
       select(sel);
     } catch (e) {
       showError(e);
@@ -239,8 +289,7 @@ select{padding:4px 6px;border-radius:6px;border:1px solid var(--border);backgrou
 
     setBusy(true);
     prog = 0; start = Date.now();
-    $('progress').classList.remove('hidden');
-    $('result').classList.add('hidden');
+    footer('progress');
     draw();
     timer = setInterval(draw, 500);
     const unlisten = await T.event.listen('progress', e => { prog = e.payload; });
@@ -254,19 +303,18 @@ select{padding:4px 6px;border-radius:6px;border:1px solid var(--border);backgrou
       outPath = output;
       const o = await invoke('probe', { path: output });
       const d = Math.round((o.size / src.size - 1) * 100);
-      $('resText').textContent = `Saved: ${fmtMB(o.size)} (${d <= 0 ? '−' + (-d) : '+' + d}%)`;
-      $('result').classList.remove('hidden');
+      $('resText').textContent = `${fmtMB(o.size)} · ${d <= 0 ? (-d) + '% smaller' : d + '% larger'} · ${fmtDur((Date.now() - start) / 1000)}`;
+      footer('result');
     } catch (e) {
-      showError(e);
+      footer('idle');
+      if (String(e) !== 'Cancelled') showError(e);
     } finally {
       clearInterval(timer);
       unlisten();
-      $('progress').classList.add('hidden');
       setBusy(false);
     }
   }
 
-  // Wiring
   grid.addEventListener('click', e => {
     const c = e.target.closest('.preset');
     if (c) select(c.dataset.id);
@@ -278,9 +326,9 @@ select{padding:4px 6px;border-radius:6px;border:1px solid var(--border);backgrou
     }
   });
   grid.addEventListener('input', e => { if (e.target.id === 'tmb') renderCards(); });
-  $('codec').addEventListener('change', () => {});
+  $('res').addEventListener('change', renderCards);
   $('dropzone').addEventListener('click', browse);
-  $('dropzone').addEventListener('keydown', e => { if (e.key === 'Enter') browse(); });
+  $('dropzone').addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') browse(); });
   $('change').addEventListener('click', browse);
   $('go').addEventListener('click', run);
   $('cancel').addEventListener('click', () => invoke('cancel').catch(showError));
@@ -288,12 +336,8 @@ select{padding:4px 6px;border-radius:6px;border:1px solid var(--border);backgrou
 
   T.webview.getCurrentWebview().onDragDropEvent(e => {
     const p = e.payload;
-    const dz = $('dropzone');
-    dz.classList.toggle('over', p.type === 'enter' || p.type === 'over');
-    if (p.type === 'drop') {
-      dz.classList.remove('over');
-      if (p.paths && p.paths[0]) load(p.paths[0]);
-    }
+    $('dropzone').classList.toggle('over', p.type === 'enter' || p.type === 'over');
+    if (p.type === 'drop' && p.paths && p.paths[0]) load(p.paths[0]);
   });
 
   select(sel);
