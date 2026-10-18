@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Video Compressor</title>
+<style>
+:root{--bg:#f5f6f8;--card:#ffffff;--border:#e2e4e9;--text:#1c1d21;--muted:#6b7080;--accent:#4f46e5;--accent-soft:#eceefe;--danger:#c81e1e;--radius:12px}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#15161a;--card:#1e2026;--border:#2e3038;--text:#eceef3;--muted:#9097a6;--accent:#818cf8;--accent-soft:#262849;--danger:#f87171}}
+:root[data-theme="dark"]{--bg:#15161a;--card:#1e2026;--border:#2e3038;--text:#eceef3;--muted:#9097a6;--accent:#818cf8;--accent-soft:#262849;--danger:#f87171}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;min-height:100vh}
+main{max-width:680px;margin:0 auto;padding:20px 20px 24px;display:flex;flex-direction:column;gap:14px}
+h1{font-size:18px;font-weight:600;margin:0}
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px}
+.hidden{display:none!important}
+#dropzone{text-align:center;padding:36px 16px;color:var(--muted);cursor:pointer;border-style:dashed;transition:.15s}
+#dropzone:hover,#dropzone.over{border-color:var(--accent);background:var(--accent-soft);color:var(--text)}
+#fileCard{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.name{font-weight:600;word-break:break-all}
+.meta{color:var(--muted);font-size:12.5px;margin-top:2px}
+button,select,input{font:inherit}
+button{cursor:pointer;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);padding:8px 14px}
+button:disabled{opacity:.5;cursor:default}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600;padding:10px 22px}
+button.link{border:0;background:none;color:var(--accent);padding:0}
+#presets{display:grid;grid-template-columns:repeat(auto-fit,minmax(128px,1fr));gap:10px}
+.preset{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:12px;cursor:pointer;display:flex;flex-direction:column;gap:6px;outline:none}
+.preset:focus-visible{box-shadow:0 0 0 2px var(--accent)}
+.preset.sel{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent);background:var(--accent-soft)}
+.top{display:flex;justify-content:space-between;align-items:center;gap:6px}
+.pname{font-weight:600}
+.pdesc{color:var(--muted);font-size:12px;min-height:2.6em}
+.est{font-size:12.5px;font-variant-numeric:tabular-nums}
+.badge{font-size:11px;padding:2px 7px;border-radius:99px;font-weight:600}
+.badge.fast{background:rgba(22,163,74,.15);color:#16a34a}
+.badge.medium{background:rgba(217,119,6,.15);color:#d97706}
+.badge.slow{background:rgba(220,38,38,.15);color:#dc2626}
+.tgt{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted)}
+.tgt input{width:72px;padding:4px 6px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text)}
+.advanced{display:flex;gap:16px;align-items:center;color:var(--muted);font-size:13px;flex-wrap:wrap}
+.advanced label{display:flex;gap:6px;align-items:center}
+select{padding:4px 6px;border-radius:6px;border:1px solid var(--border);background:var(--card);color:var(--text)}
+.actions{display:flex;gap:10px;justify-content:flex-end;align-items:center}
+.bar{height:8px;background:var(--border);border-radius:99px;overflow:hidden}
+#fill{height:100%;width:0;background:var(--accent);transition:width .4s}
+.row{display:flex;justify-content:space-between;font-size:12.5px;color:var(--muted);margin-top:8px;font-variant-numeric:tabular-nums}
+#result{display:flex;justify-content:space-between;align-items:center;gap:12px;font-weight:600}
+.error{color:var(--danger);font-size:13px}
+.busy #dropzone,.busy .preset,.busy #change{pointer-events:none;opacity:.6}
+</style>
+</head>
+<body>
+<main>
+  <h1>Video Compressor</h1>
+
+  <section id="dropzone" class="card" tabindex="0">Drop a video here or click to browse</section>
+
+  <section id="fileCard" class="card hidden">
+    <div>
+      <div id="fName" class="name"></div>
+      <div id="fMeta" class="meta"></div>
+    </div>
+    <button id="change" class="link">change</button>
+  </section>
+
+  <section id="presets"></section>
+
+  <section class="advanced">
+    <label>Codec
+      <select id="codec">
+        <option value="h264">H.264</option>
+        <option value="h265">H.265</option>
+      </select>
+    </label>
+    <label>Resolution
+      <select id="res">
+        <option value="0">Original</option>
+        <option value="1080">1080p</option>
+        <option value="720">720p</option>
+        <option value="480">480p</option>
+      </select>
+    </label>
+  </section>
+
+  <div class="actions">
+    <button id="cancel" class="hidden">Cancel</button>
+    <button id="go" class="primary" disabled>Compress</button>
+  </div>
+
+  <section id="progress" class="card hidden">
+    <div class="bar"><div id="fill"></div></div>
+    <div class="row"><span id="pct">0%</span><span id="time"></span></div>
+  </section>
+
+  <section id="result" class="card hidden">
+    <span id="resText"></span>
+    <button id="reveal">Show in folder</button>
+  </section>
+
+  <div id="error" class="error hidden"></div>
+</main>
+
+<script>
+(() => {
+  const T = window.__TAURI__;
+  const { invoke } = T.core;
+  const $ = id => document.getElementById(id);
+  const VIDEO = ['mp4','mkv','mov','avi','webm','m4v','wmv','flv'];
+  const MB = 1048576;
+  const PRESETS = {
+    target:   { mode:'target', speed:'slow',   name:'Target size', desc:'Fit a chosen file size' },
+    high:     { mode:'crf', codec:'h264', crf:20, ratio:0.6,  speed:'slow',   name:'High quality', desc:'Near-original look' },
+    balanced: { mode:'crf', codec:'h265', crf:26, ratio:0.3,  speed:'medium', name:'Balanced', desc:'Good quality, small file' },
+    smallest: { mode:'crf', codec:'h265', crf:32, ratio:0.12, speed:'fast',   name:'Smallest', desc:'Tiny file, 720p max' },
+    lossless: { mode:'lossless', codec:'h264', speed:'medium', name:'Lossless', desc:'Archival, no quality loss' }
+  };
+
+  let src = null, sel = 'balanced', busy = false, outPath = null;
+  let start = 0, prog = 0, timer = null;
+
+  // Build preset cards
+  const grid = $('presets');
+  for (const [id, p] of Object.entries(PRESETS)) {
+    const el = document.createElement('div');
+    el.className = 'preset';
+    el.dataset.id = id;
+    el.setAttribute('role', 'radio');
+    el.tabIndex = 0;
+    const label = p.speed[0].toUpperCase() + p.speed.slice(1);
+    el.innerHTML = `<div class="top"><span class="pname">${p.name}</span><span class="badge ${p.speed}">${label}</span></div>
+      <div class="pdesc">${p.desc}</div>
+      ${id === 'target' ? '<label class="tgt"><input id="tmb" type="number" min="0.1" step="0.1" value="25"> MB</label>' : ''}
+      <div class="est"></div>`;
+    grid.append(el);
+  }
+
+  const fmtMB = b => (b / MB).toFixed(1) + ' MB';
+  const fmtDur = s => {
+    s = Math.round(s);
+    const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = s % 60;
+    return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(x).padStart(2, '0');
+  };
+  const showError = e => { const el = $('error'); el.textContent = String(e?.message || e); el.classList.remove('hidden'); };
+  const clearError = () => $('error').classList.add('hidden');
+
+  function estimate(id) {
+    if (id === 'lossless') return 'Larger than source (archival)';
+    if (!src) return '~ —';
+    if (id === 'target') return '~' + (+$('tmb').value || 0).toFixed(1) + ' MB';
+    return '~' + fmtMB(src.size * PRESETS[id].ratio);
+  }
+
+  function renderCards() {
+    document.querySelectorAll('.preset').forEach(el => {
+      const on = el.dataset.id === sel;
+      el.classList.toggle('sel', on);
+      el.setAttribute('aria-checked', on);
+      el.querySelector('.est').textContent = estimate(el.dataset.id);
+    });
+  }
+
+  function updateControls() {
+    const ll = sel === 'lossless';
+    $('go').disabled = busy || !src;
+    $('tmb').disabled = busy;
+    $('codec').disabled = busy || ll;
+    $('res').disabled = busy || ll;
+    $('change').disabled = busy;
+  }
+
+  function select(id) {
+    if (busy) return;
+    sel = id;
+    const p = PRESETS[id];
+    if (p.codec) $('codec').value = p.codec;
+    if (id === 'smallest') $('res').value = (!src || src.height > 720) ? '720' : '0';
+    if (id === 'lossless') $('res').value = '0';
+    renderCards();
+    updateControls();
+  }
+
+  function setBusy(b) {
+    busy = b;
+    document.body.classList.toggle('busy', b);
+    $('go').textContent = b ? 'Compressing…' : 'Compress';
+    $('cancel').classList.toggle('hidden', !b);
+    updateControls();
+  }
+
+  function draw() {
+    const el = Math.max(0, (Date.now() - start) / 1000);
+    $('fill').style.width = (prog * 100).toFixed(1) + '%';
+    $('pct').textContent = Math.round(prog * 100) + '%';
+    const eta = prog > 0.01 ? el / prog * (1 - prog) : null;
+    $('time').textContent = `Elapsed ${fmtDur(el)}` + (eta != null ? ` · ETA ${fmtDur(eta)}` : '');
+  }
+
+  async function load(path) {
+    if (busy) return;
+    clearError();
+    try {
+      const info = await invoke('probe', { path });
+      src = { ...info, path };
+      $('fName').textContent = path.split(/[\\/]/).pop();
+      $('fMeta').textContent = `${fmtMB(src.size)} · ${src.width}×${src.height} · ${fmtDur(src.duration)} · ${src.codec}`;
+      $('fileCard').classList.remove('hidden');
+      $('dropzone').classList.add('hidden');
+      $('result').classList.add('hidden');
+      $('tmb').value = (src.size / MB * 0.25).toFixed(1);
+      select(sel);
+    } catch (e) {
+      showError(e);
+    }
+  }
+
+  async function browse() {
+    if (busy) return;
+    try {
+      const r = await T.dialog.open({ multiple: false, filters: [{ name: 'Video', extensions: VIDEO }] });
+      const p = Array.isArray(r) ? r[0] : r;
+      if (p) load(p);
+    } catch (e) { showError(e); }
+  }
+
+  async function run() {
+    if (busy || !src) return;
+    clearError();
+    const ll = sel === 'lossless';
+    const ext = ll ? 'mkv' : 'mp4';
+    const base = src.path.replace(/\.[^\\/.]+$/, '');
+    const tmb = +$('tmb').value;
+    if (sel === 'target' && !(tmb > 0)) return showError('Enter a target size greater than 0 MB.');
+    let output;
+    try {
+      output = await T.dialog.save({ defaultPath: `${base}_compressed.${ext}`, filters: [{ name: 'Video', extensions: [ext] }] });
+    } catch (e) { return showError(e); }
+    if (!output) return;
+
+    setBusy(true);
+    prog = 0; start = Date.now();
+    $('progress').classList.remove('hidden');
+    $('result').classList.add('hidden');
+    draw();
+    timer = setInterval(draw, 500);
+    const unlisten = await T.event.listen('progress', e => { prog = e.payload; });
+    try {
+      const p = PRESETS[sel];
+      await invoke('compress', { opts: {
+        input: src.path, output, mode: p.mode, codec: $('codec').value,
+        crf: p.crf || 0, target_mb: sel === 'target' ? tmb : 0,
+        height: ll ? 0 : +$('res').value
+      } });
+      outPath = output;
+      const o = await invoke('probe', { path: output });
+      const d = Math.round((o.size / src.size - 1) * 100);
+      $('resText').textContent = `Saved: ${fmtMB(o.size)} (${d <= 0 ? '−' + (-d) : '+' + d}%)`;
+      $('result').classList.remove('hidden');
+    } catch (e) {
+      showError(e);
+    } finally {
+      clearInterval(timer);
+      unlisten();
+      $('progress').classList.add('hidden');
+      setBusy(false);
+    }
+  }
+
+  // Wiring
+  grid.addEventListener('click', e => {
+    const c = e.target.closest('.preset');
+    if (c) select(c.dataset.id);
+  });
+  grid.addEventListener('keydown', e => {
+    if (e.target.classList.contains('preset') && (e.key === 'Enter' || e.key === ' ')) {
+      e.preventDefault();
+      select(e.target.dataset.id);
+    }
+  });
+  grid.addEventListener('input', e => { if (e.target.id === 'tmb') renderCards(); });
+  $('codec').addEventListener('change', () => {});
+  $('dropzone').addEventListener('click', browse);
+  $('dropzone').addEventListener('keydown', e => { if (e.key === 'Enter') browse(); });
+  $('change').addEventListener('click', browse);
+  $('go').addEventListener('click', run);
+  $('cancel').addEventListener('click', () => invoke('cancel').catch(showError));
+  $('reveal').addEventListener('click', () => T.opener.revealItemInDir(outPath).catch(showError));
+
+  T.webview.getCurrentWebview().onDragDropEvent(e => {
+    const p = e.payload;
+    const dz = $('dropzone');
+    dz.classList.toggle('over', p.type === 'enter' || p.type === 'over');
+    if (p.type === 'drop') {
+      dz.classList.remove('over');
+      if (p.paths && p.paths[0]) load(p.paths[0]);
+    }
+  });
+
+  select(sel);
+})();
+</script>
+</body>
+</html>
