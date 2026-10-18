@@ -1,0 +1,347 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Squeeze</title>
+<style>
+:root{--bg:#f6f7f9;--panel:#fff;--panel2:#f1f2f5;--border:#e3e5ea;--text:#16171b;--muted:#6a6f7d;--accent:#5b5bf0;--accent-2:#7c6cf6;--accent-soft:rgba(91,91,240,.08);--ok:#16a34a;--warn:#c27803;--slow:#dc2626;--danger:#dc2626;--shadow:0 1px 2px rgba(16,18,27,.05),0 4px 16px rgba(16,18,27,.04)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#0f1014;--panel:#17181d;--panel2:#202229;--border:#272930;--text:#eceef3;--muted:#8b91a0;--accent:#7b7bff;--accent-2:#9a8cff;--accent-soft:rgba(123,123,255,.11);--ok:#4ade80;--warn:#fbbf24;--slow:#f87171;--danger:#f87171;--shadow:none}}
+:root[data-theme="dark"]{--bg:#0f1014;--panel:#17181d;--panel2:#202229;--border:#272930;--text:#eceef3;--muted:#8b91a0;--accent:#7b7bff;--accent-2:#9a8cff;--accent-soft:rgba(123,123,255,.11);--ok:#4ade80;--warn:#fbbf24;--slow:#f87171;--danger:#f87171;--shadow:none}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 "Segoe UI Variable Text","Segoe UI",system-ui,-apple-system,Roboto,sans-serif;-webkit-font-smoothing:antialiased;user-select:none;display:flex;flex-direction:column}
+main{flex:1;overflow:auto;padding:22px 28px 18px}
+.wrap{max-width:804px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+header{display:flex;align-items:center;gap:10px}
+.logo{width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,var(--accent),var(--accent-2));display:grid;place-items:center}
+h1{font-size:16px;font-weight:650;margin:0;letter-spacing:-.01em}
+.sub{color:var(--muted);font-size:12.5px;margin-left:auto}
+.hidden{display:none!important}
+.label{font-size:11.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:4px 2px -6px}
+#dropzone{border:1.5px dashed var(--border);border-radius:14px;padding:38px 16px;text-align:center;cursor:pointer;transition:border-color .15s,background .15s;background:var(--panel)}
+#dropzone:hover,#dropzone:focus-visible,#dropzone.over{border-color:var(--accent);background:var(--accent-soft);outline:none}
+#dropzone svg{color:var(--accent);margin-bottom:8px}
+.dz-title{font-size:15px;font-weight:600}
+.dz-sub{color:var(--muted);font-size:12.5px;margin-top:4px}
+#fileCard{display:flex;align-items:center;gap:14px;background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:14px 16px;box-shadow:var(--shadow)}
+.thumb{width:42px;height:42px;border-radius:10px;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;flex:none}
+.fileinfo{min-width:0;flex:1}
+.name{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.meta{color:var(--muted);font-size:12.5px;margin-top:2px;display:flex;gap:6px;flex-wrap:wrap}
+.meta span+span::before{content:"·";margin-right:6px;opacity:.6}
+button,select,input{font:inherit;color:inherit}
+button{cursor:pointer;border-radius:9px;border:1px solid var(--border);background:var(--panel);padding:8px 14px;transition:background .15s,filter .15s,transform .05s}
+button:hover:not(:disabled){background:var(--panel2)}
+button:active:not(:disabled){transform:translateY(1px)}
+button:disabled{opacity:.45;cursor:default}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button.primary{background:var(--accent);border-color:transparent;color:#fff;font-weight:600;padding:10px 26px;min-width:150px}
+button.primary:hover:not(:disabled){background:var(--accent);filter:brightness(1.08)}
+#presets{display:flex;flex-direction:column;gap:8px}
+.preset{display:grid;grid-template-columns:20px 1fr auto 100px;align-items:center;gap:14px;background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:13px 16px;cursor:pointer;outline:none;transition:border-color .15s,background .15s}
+.preset:hover{border-color:color-mix(in srgb,var(--accent) 45%,var(--border))}
+.preset:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.preset.sel{border-color:var(--accent);background:var(--accent-soft)}
+.radio{width:18px;height:18px;border-radius:50%;border:1.5px solid var(--border);display:grid;place-items:center}
+.preset.sel .radio{border-color:var(--accent)}
+.preset.sel .radio::after{content:"";width:9px;height:9px;border-radius:50%;background:var(--accent)}
+.pname{font-weight:600}
+.pdesc{color:var(--muted);font-size:12.5px}
+.est{font-variant-numeric:tabular-nums;font-weight:600;text-align:right}
+.est small{display:block;font-weight:400;color:var(--muted);font-size:11.5px}
+.badge{font-size:11px;padding:3px 8px;border-radius:99px;font-weight:600;min-width:62px;text-align:center}
+.badge.fast{background:color-mix(in srgb,var(--ok) 14%,transparent);color:var(--ok)}
+.badge.medium{background:color-mix(in srgb,var(--warn) 14%,transparent);color:var(--warn)}
+.badge.slow{background:color-mix(in srgb,var(--slow) 14%,transparent);color:var(--slow)}
+.tgt{display:inline-flex;align-items:center;gap:6px;margin-top:6px;color:var(--muted);font-size:12.5px}
+.tgt input{width:84px;padding:5px 8px;border-radius:8px;border:1px solid var(--border);background:var(--bg)}
+.advanced{display:flex;gap:18px;align-items:center;color:var(--muted);font-size:13px;flex-wrap:wrap;padding:0 2px}
+.advanced label{display:flex;gap:8px;align-items:center}
+select{padding:6px 10px;border-radius:8px;border:1px solid var(--border);background:var(--panel);cursor:pointer}
+option{background:var(--panel)}
+footer{border-top:1px solid var(--border);background:var(--panel);padding:14px 28px}
+.foot{max-width:804px;margin:0 auto;display:flex;align-items:center;gap:12px}
+.status{flex:1;min-width:0}
+.bar{height:6px;background:var(--panel2);border-radius:99px;overflow:hidden}
+#fill{height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--accent-2));border-radius:99px;transition:width .4s}
+.row{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-top:6px;font-variant-numeric:tabular-nums}
+#idle{color:var(--muted);font-size:13px}
+#result{display:flex;align-items:center;gap:10px;font-weight:600;min-width:0}
+#result .ok{width:22px;height:22px;border-radius:50%;background:color-mix(in srgb,var(--ok) 16%,transparent);color:var(--ok);display:grid;place-items:center;flex:none}
+#resText{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#reveal{padding:6px 12px;font-weight:500;font-size:13px}
+.error{color:var(--danger);font-size:13px;background:color-mix(in srgb,var(--danger) 9%,transparent);border:1px solid color-mix(in srgb,var(--danger) 25%,transparent);border-radius:10px;padding:10px 12px;white-space:pre-wrap;user-select:text}
+.busy #dropzone,.busy .preset,.busy #change{pointer-events:none;opacity:.6}
+@media (max-width:560px){main{padding:16px}footer{padding:12px 16px}.preset{grid-template-columns:20px 1fr 84px}.badge{display:none}}
+</style>
+</head>
+<body>
+<main><div class="wrap">
+  <header>
+    <div class="logo"><svg width="14" height="14" viewBox="0 0 24 24" fill="#fff"><path d="M8 5v14l11-7z"/></svg></div>
+    <h1>Squeeze</h1>
+    <span class="sub">Video compressor</span>
+  </header>
+
+  <section id="dropzone" tabindex="0" role="button" aria-label="Choose a video">
+    <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4m0 0L8 8m4-4 4 4"/><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>
+    <div class="dz-title">Drop a video here</div>
+    <div class="dz-sub">or click to browse · MP4, MKV, MOV, AVI, WebM</div>
+  </section>
+
+  <section id="fileCard" class="hidden">
+    <div class="thumb"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="3" y="5" width="13" height="14" rx="2"/><path d="m16 10 5-3v10l-5-3z"/></svg></div>
+    <div class="fileinfo">
+      <div id="fName" class="name"></div>
+      <div id="fMeta" class="meta"></div>
+    </div>
+    <button id="change">Change</button>
+  </section>
+
+  <div class="label">Compression</div>
+  <section id="presets" role="radiogroup" aria-label="Compression preset"></section>
+
+  <section class="advanced">
+    <label>Codec
+      <select id="codec">
+        <option value="h264">H.264 · plays everywhere</option>
+        <option value="h265">H.265 · smaller files</option>
+      </select>
+    </label>
+    <label>Resolution
+      <select id="res">
+        <option value="0">Original</option>
+        <option value="1080">1080p</option>
+        <option value="720">720p</option>
+        <option value="480">480p</option>
+      </select>
+    </label>
+  </section>
+
+  <div id="error" class="error hidden" role="alert"></div>
+</div></main>
+
+<footer>
+  <div class="foot">
+    <div class="status">
+      <div id="idle">Choose a video to get started</div>
+      <div id="progress" class="hidden">
+        <div class="bar"><div id="fill"></div></div>
+        <div class="row"><span id="pct">0%</span><span id="time"></span></div>
+      </div>
+      <div id="result" class="hidden">
+        <span class="ok"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"/></svg></span>
+        <span id="resText"></span>
+        <button id="reveal">Show in folder</button>
+      </div>
+    </div>
+    <button id="cancel" class="hidden">Cancel</button>
+    <button id="go" class="primary" disabled>Compress</button>
+  </div>
+</footer>
+
+<script>
+(() => {
+  const T = window.__TAURI__;
+  const { invoke } = T.core;
+  const $ = id => document.getElementById(id);
+  const VIDEO = ['mp4','mkv','mov','avi','webm','m4v','wmv','flv'];
+  const MB = 1048576;
+  // ponytail: ratios are rough rules of thumb, real size depends on content
+  const PRESETS = {
+    target:   { mode:'target', speed:'slow', name:'Target size', desc:'Hit an exact file size (two-pass)' },
+    high:     { mode:'crf', codec:'h264', crf:20, ratio:0.6,  speed:'medium', name:'High quality', desc:'Visually near-identical' },
+    balanced: { mode:'crf', codec:'h265', crf:26, ratio:0.3,  speed:'medium', name:'Balanced', desc:'Great quality, much smaller' },
+    smallest: { mode:'crf', codec:'h265', crf:32, ratio:0.1, speed:'fast', name:'Smallest', desc:'Tiny file, up to 720p' },
+    lossless: { mode:'lossless', codec:'h264', speed:'fast', name:'Lossless', desc:'Bit-perfect picture, for archiving or editing' }
+  };
+
+  let src = null, sel = 'balanced', busy = false, outPath = null;
+  let start = 0, prog = 0, timer = null;
+
+  const grid = $('presets');
+  for (const [id, p] of Object.entries(PRESETS)) {
+    const el = document.createElement('div');
+    el.className = 'preset';
+    el.dataset.id = id;
+    el.setAttribute('role', 'radio');
+    el.tabIndex = 0;
+    const label = p.speed[0].toUpperCase() + p.speed.slice(1);
+    el.innerHTML = `<span class="radio"></span>
+      <div><div class="pname">${p.name}</div><div class="pdesc">${p.desc}</div>
+      ${id === 'target' ? '<label class="tgt">Size <input id="tmb" type="number" min="0.1" step="0.5" value="25"> MB</label>' : ''}</div>
+      <span class="badge ${p.speed}">${label}</span>
+      <div class="est"></div>`;
+    grid.append(el);
+  }
+
+  const fmtMB = b => { const m = b / MB; return (m >= 1024 ? (m / 1024).toFixed(2) + ' GB' : m.toFixed(m < 10 ? 1 : 0) + ' MB'); };
+  const fmtDur = s => {
+    s = Math.round(s);
+    const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = s % 60;
+    return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(x).padStart(2, '0');
+  };
+  const showError = e => { const el = $('error'); el.textContent = String(e?.message || e); el.classList.remove('hidden'); };
+  const clearError = () => $('error').classList.add('hidden');
+  const footer = state => ['idle', 'progress', 'result'].forEach(id => $(id).classList.toggle('hidden', id !== state));
+
+  function estimate(id) {
+    if (id === 'lossless') return 'Larger<small>than source</small>';
+    if (!src) return '—';
+    const pct = b => `<small>${Math.round(b / src.size * 100)}% of original</small>`;
+    if (id === 'target') { const b = (+$('tmb').value || 0) * MB; return fmtMB(b) + pct(b); }
+    let b = src.size * PRESETS[id].ratio;
+    const h = +$('res').value;
+    if (h && h < src.height) b *= (h / src.height) ** 1.5;
+    return '~' + fmtMB(b) + pct(b);
+  }
+
+  function renderCards() {
+    document.querySelectorAll('.preset').forEach(el => {
+      const on = el.dataset.id === sel;
+      el.classList.toggle('sel', on);
+      el.setAttribute('aria-checked', on);
+      el.querySelector('.est').innerHTML = estimate(el.dataset.id);
+    });
+  }
+
+  function updateControls() {
+    const ll = sel === 'lossless';
+    $('go').disabled = busy || !src;
+    $('tmb').disabled = busy;
+    $('codec').disabled = busy || ll;
+    $('res').disabled = busy || ll;
+    $('change').disabled = busy;
+  }
+
+  function select(id) {
+    if (busy) return;
+    sel = id;
+    const p = PRESETS[id];
+    if (p.codec) $('codec').value = p.codec;
+    if (id === 'smallest') $('res').value = (!src || src.height > 720) ? '720' : '0';
+    else if (id !== 'target') $('res').value = '0';
+    renderCards();
+    updateControls();
+  }
+
+  function setBusy(b) {
+    busy = b;
+    document.body.classList.toggle('busy', b);
+    $('go').textContent = b ? 'Compressing…' : 'Compress';
+    $('cancel').classList.toggle('hidden', !b);
+    updateControls();
+  }
+
+  function draw() {
+    const el = Math.max(0, (Date.now() - start) / 1000);
+    $('fill').style.width = (prog * 100).toFixed(1) + '%';
+    $('pct').textContent = Math.round(prog * 100) + '%';
+    const eta = prog > 0.01 ? el / prog * (1 - prog) : null;
+    $('time').textContent = `Elapsed ${fmtDur(el)}` + (eta != null ? ` · ${fmtDur(eta)} left` : '');
+  }
+
+  async function load(path) {
+    if (busy) return;
+    clearError();
+    try {
+      const info = await invoke('probe', { path });
+      src = { ...info, path };
+      $('fName').textContent = path.split(/[\\/]/).pop();
+      $('fMeta').innerHTML = '';
+      for (const t of [fmtMB(src.size), `${src.width}×${src.height}`, fmtDur(src.duration), src.codec.toUpperCase()]) {
+        const s = document.createElement('span'); s.textContent = t; $('fMeta').append(s);
+      }
+      $('fileCard').classList.remove('hidden');
+      $('dropzone').classList.add('hidden');
+      footer('idle');
+      $('idle').textContent = 'Pick a preset, then compress';
+      $('tmb').value = Math.max(1, Math.round(src.size / MB * 0.25));
+      select(sel);
+    } catch (e) {
+      showError(e);
+    }
+  }
+
+  async function browse() {
+    if (busy) return;
+    try {
+      const r = await T.dialog.open({ multiple: false, filters: [{ name: 'Video', extensions: VIDEO }] });
+      const p = Array.isArray(r) ? r[0] : r;
+      if (p) load(p);
+    } catch (e) { showError(e); }
+  }
+
+  async function run() {
+    if (busy || !src) return;
+    clearError();
+    const ll = sel === 'lossless';
+    const ext = ll ? 'mkv' : 'mp4';
+    const base = src.path.replace(/\.[^\\/.]+$/, '');
+    const tmb = +$('tmb').value;
+    if (sel === 'target' && !(tmb > 0)) return showError('Enter a target size greater than 0 MB.');
+    let output;
+    try {
+      output = await T.dialog.save({ defaultPath: `${base}_compressed.${ext}`, filters: [{ name: 'Video', extensions: [ext] }] });
+    } catch (e) { return showError(e); }
+    if (!output) return;
+
+    setBusy(true);
+    prog = 0; start = Date.now();
+    footer('progress');
+    draw();
+    timer = setInterval(draw, 500);
+    const unlisten = await T.event.listen('progress', e => { prog = e.payload; });
+    try {
+      const p = PRESETS[sel];
+      await invoke('compress', { opts: {
+        input: src.path, output, mode: p.mode, codec: $('codec').value,
+        crf: p.crf || 0, target_mb: sel === 'target' ? tmb : 0,
+        height: ll ? 0 : +$('res').value
+      } });
+      outPath = output;
+      const o = await invoke('probe', { path: output });
+      const d = Math.round((o.size / src.size - 1) * 100);
+      $('resText').textContent = `${fmtMB(o.size)} · ${d <= 0 ? (-d) + '% smaller' : d + '% larger'} · ${fmtDur((Date.now() - start) / 1000)}`;
+      footer('result');
+    } catch (e) {
+      footer('idle');
+      if (String(e) !== 'Cancelled') showError(e);
+    } finally {
+      clearInterval(timer);
+      unlisten();
+      setBusy(false);
+    }
+  }
+
+  grid.addEventListener('click', e => {
+    const c = e.target.closest('.preset');
+    if (c) select(c.dataset.id);
+  });
+  grid.addEventListener('keydown', e => {
+    if (e.target.classList.contains('preset') && (e.key === 'Enter' || e.key === ' ')) {
+      e.preventDefault();
+      select(e.target.dataset.id);
+    }
+  });
+  grid.addEventListener('input', e => { if (e.target.id === 'tmb') renderCards(); });
+  $('res').addEventListener('change', renderCards);
+  $('dropzone').addEventListener('click', browse);
+  $('dropzone').addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') browse(); });
+  $('change').addEventListener('click', browse);
+  $('go').addEventListener('click', run);
+  $('cancel').addEventListener('click', () => invoke('cancel').catch(showError));
+  $('reveal').addEventListener('click', () => T.opener.revealItemInDir(outPath).catch(showError));
+
+  T.webview.getCurrentWebview().onDragDropEvent(e => {
+    const p = e.payload;
+    $('dropzone').classList.toggle('over', p.type === 'enter' || p.type === 'over');
+    if (p.type === 'drop' && p.paths && p.paths[0]) load(p.paths[0]);
+  });
+
+  select(sel);
+})();
+</script>
+</body>
+</html>
