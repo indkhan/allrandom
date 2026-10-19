@@ -1,0 +1,56 @@
+name: release
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+          - os: ubuntu-22.04
+          - os: macos-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with: { workspaces: src-tauri }
+
+      - name: Linux deps + ffmpeg
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+          mkdir -p src-tauri/binaries
+          curl -fsSL https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz | tar -xJ --wildcards --strip-components=1 -C /tmp '*/ffmpeg'
+          mv /tmp/ffmpeg src-tauri/binaries/ffmpeg-x86_64-unknown-linux-gnu
+      - name: macOS ffmpeg
+        if: runner.os == 'macOS'
+        run: |
+          mkdir -p src-tauri/binaries
+          curl -fsSL -o /tmp/ff.zip https://ffmpeg.martin-riedl.de/redirect/latest/macos/arm64/release/ffmpeg.zip
+          unzip -o /tmp/ff.zip -d /tmp/ff
+          mv /tmp/ff/ffmpeg src-tauri/binaries/ffmpeg-aarch64-apple-darwin
+          chmod +x src-tauri/binaries/ffmpeg-aarch64-apple-darwin
+      - name: Windows ffmpeg
+        if: runner.os == 'Windows'
+        run: ./get-ffmpeg.ps1
+
+      - run: npm ci
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: v__VERSION__
+          releaseName: All v__VERSION__
+          releaseBody: Download the installer for your OS below.
+          releaseDraft: false
