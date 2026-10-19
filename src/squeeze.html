@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Squeeze · All</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main><div class="wrap">
+  <header>
+    <a class="back" href="index.html" aria-label="Back">&larr;</a>
+    <div class="logo"><svg width="14" height="14" viewBox="0 0 24 24" fill="#fff"><path d="M8 5v14l11-7z"/></svg></div>
+    <h1>Squeeze</h1>
+    <span class="sub">Video compressor</span>
+  </header>
+
+  <section id="dropzone" tabindex="0" role="button" aria-label="Choose a video">
+    <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4m0 0L8 8m4-4 4 4"/><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>
+    <div class="dz-title">Drop a video here</div>
+    <div class="dz-sub">or click to browse · MP4, MKV, MOV, AVI, WebM</div>
+  </section>
+
+  <section id="fileCard" class="hidden">
+    <div class="thumb"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="3" y="5" width="13" height="14" rx="2"/><path d="m16 10 5-3v10l-5-3z"/></svg></div>
+    <div class="fileinfo">
+      <div id="fName" class="name"></div>
+      <div id="fMeta" class="meta"></div>
+    </div>
+    <button id="change">Change</button>
+  </section>
+
+  <div class="label">Compression</div>
+  <section id="presets" role="radiogroup" aria-label="Compression preset"></section>
+
+  <section class="advanced">
+    <label>Codec
+      <select id="codec">
+        <option value="h264">H.264 · plays everywhere</option>
+        <option value="h265">H.265 · smaller files</option>
+      </select>
+    </label>
+    <label>Resolution
+      <select id="res">
+        <option value="0">Original</option>
+        <option value="1080">1080p</option>
+        <option value="720">720p</option>
+        <option value="480">480p</option>
+      </select>
+    </label>
+  </section>
+
+  <div id="error" class="error hidden" role="alert"></div>
+</div></main>
+
+<footer>
+  <div class="foot">
+    <div class="status">
+      <div id="idle">Choose a video to get started</div>
+      <div id="progress" class="hidden">
+        <div class="bar"><div id="fill"></div></div>
+        <div class="row"><span id="pct">0%</span><span id="time"></span></div>
+      </div>
+      <div id="result" class="hidden">
+        <span class="ok"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"/></svg></span>
+        <span id="resText"></span>
+        <button id="reveal">Show in folder</button>
+      </div>
+    </div>
+    <button id="cancel" class="hidden">Cancel</button>
+    <button id="go" class="primary" disabled>Compress</button>
+  </div>
+</footer>
+
+<script>
+(() => {
+  const T = window.__TAURI__;
+  const { invoke } = T.core;
+  const $ = id => document.getElementById(id);
+  const VIDEO = ['mp4','mkv','mov','avi','webm','m4v','wmv','flv'];
+  const MB = 1048576;
+  // ponytail: ratios are rough rules of thumb, real size depends on content
+  const PRESETS = {
+    target:   { mode:'target', speed:'slow', name:'Target size', desc:'Hit an exact file size (two-pass)' },
+    high:     { mode:'crf', codec:'h264', crf:20, ratio:0.6,  speed:'medium', name:'High quality', desc:'Visually near-identical' },
+    balanced: { mode:'crf', codec:'h265', crf:26, ratio:0.3,  speed:'medium', name:'Balanced', desc:'Great quality, much smaller' },
+    smallest: { mode:'crf', codec:'h265', crf:32, ratio:0.1, speed:'fast', name:'Smallest', desc:'Tiny file, up to 720p' },
+    lossless: { mode:'lossless', codec:'h264', speed:'fast', name:'Lossless', desc:'Bit-perfect picture, for archiving or editing' }
+  };
+
+  let src = null, sel = 'balanced', busy = false, outPath = null;
+  let start = 0, prog = 0, timer = null;
+
+  const grid = $('presets');
+  for (const [id, p] of Object.entries(PRESETS)) {
+    const el = document.createElement('div');
+    el.className = 'preset';
+    el.dataset.id = id;
+    el.setAttribute('role', 'radio');
+    el.tabIndex = 0;
+    const label = p.speed[0].toUpperCase() + p.speed.slice(1);
+    el.innerHTML = `<span class="radio"></span>
+      <div><div class="pname">${p.name}</div><div class="pdesc">${p.desc}</div>
+      ${id === 'target' ? '<label class="tgt">Size <input id="tmb" type="number" min="0.1" step="0.5" value="25"> MB</label>' : ''}</div>
+      <span class="badge ${p.speed}">${label}</span>
+      <div class="est"></div>`;
+    grid.append(el);
+  }
+
+  const fmtMB = b => { const m = b / MB; return (m >= 1024 ? (m / 1024).toFixed(2) + ' GB' : m.toFixed(m < 10 ? 1 : 0) + ' MB'); };
+  const fmtDur = s => {
+    s = Math.round(s);
+    const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = s % 60;
+    return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(x).padStart(2, '0');
+  };
+  const showError = e => { const el = $('error'); el.textContent = String(e?.message || e); el.classList.remove('hidden'); };
+  const clearError = () => $('error').classList.add('hidden');
+  const footer = state => ['idle', 'progress', 'result'].forEach(id => $(id).classList.toggle('hidden', id !== state));
+
+  function estimate(id) {
+    if (id === 'lossless') return 'Larger<small>than source</small>';
+    if (!src) return '—';
+    const pct = b => `<small>${Math.round(b / src.size * 100)}% of original</small>`;
+    if (id === 'target') { const b = (+$('tmb').value || 0) * MB; return fmtMB(b) + pct(b); }
+    let b = src.size * PRESETS[id].ratio;
+    const h = +$('res').value;
+    if (h && h < src.height) b *= (h / src.height) ** 1.5;
+    return '~' + fmtMB(b) + pct(b);
+  }
+
+  function renderCards() {
+    document.querySelectorAll('.preset').forEach(el => {
+      const on = el.dataset.id === sel;
+      el.classList.toggle('sel', on);
+      el.setAttribute('aria-checked', on);
+      el.querySelector('.est').innerHTML = estimate(el.dataset.id);
+    });
+  }
+
+  function updateControls() {
+    const ll = sel === 'lossless';
+    $('go').disabled = busy || !src;
+    $('tmb').disabled = busy;
+    $('codec').disabled = busy || ll;
+    $('res').disabled = busy || ll;
+    $('change').disabled = busy;
+  }
+
+  function select(id) {
+    if (busy) return;
+    sel = id;
+    const p = PRESETS[id];
+    if (p.codec) $('codec').value = p.codec;
+    if (id === 'smallest') $('res').value = (!src || src.height > 720) ? '720' : '0';
+    else if (id !== 'target') $('res').value = '0';
+    renderCards();
+    updateControls();
+  }
+
+  function setBusy(b) {
+    busy = b;
+    document.body.classList.toggle('busy', b);
+    $('go').textContent = b ? 'Compressing…' : 'Compress';
+    $('cancel').classList.toggle('hidden', !b);
+    updateControls();
+  }
+
+  function draw() {
+    const el = Math.max(0, (Date.now() - start) / 1000);
+    $('fill').style.width = (prog * 100).toFixed(1) + '%';
+    $('pct').textContent = Math.round(prog * 100) + '%';
+    const eta = prog > 0.01 ? el / prog * (1 - prog) : null;
+    $('time').textContent = `Elapsed ${fmtDur(el)}` + (eta != null ? ` · ${fmtDur(eta)} left` : '');
+  }
+
+  async function load(path) {
+    if (busy) return;
+    clearError();
+    try {
+      const info = await invoke('probe', { path });
+      src = { ...info, path };
+      $('fName').textContent = path.split(/[\\/]/).pop();
+      $('fMeta').innerHTML = '';
+      for (const t of [fmtMB(src.size), `${src.width}×${src.height}`, fmtDur(src.duration), src.codec.toUpperCase()]) {
+        const s = document.createElement('span'); s.textContent = t; $('fMeta').append(s);
+      }
+      $('fileCard').classList.remove('hidden');
+      $('dropzone').classList.add('hidden');
+      footer('idle');
+      $('idle').textContent = 'Pick a preset, then compress';
+      $('tmb').value = Math.max(1, Math.round(src.size / MB * 0.25));
+      select(sel);
+    } catch (e) {
+      showError(e);
+    }
+  }
+
+  async function browse() {
+    if (busy) return;
+    try {
+      const r = await T.dialog.open({ multiple: false, filters: [{ name: 'Video', extensions: VIDEO }] });
+      const p = Array.isArray(r) ? r[0] : r;
+      if (p) load(p);
+    } catch (e) { showError(e); }
+  }
+
+  async function run() {
+    if (busy || !src) return;
+    clearError();
+    const ll = sel === 'lossless';
+    const ext = ll ? 'mkv' : 'mp4';
+    const base = src.path.replace(/\.[^\\/.]+$/, '');
+    const tmb = +$('tmb').value;
+    if (sel === 'target' && !(tmb > 0)) return showError('Enter a target size greater than 0 MB.');
+    let output;
+    try {
+      output = await T.dialog.save({ defaultPath: `${base}_compressed.${ext}`, filters: [{ name: 'Video', extensions: [ext] }] });
+    } catch (e) { return showError(e); }
+    if (!output) return;
+
+    setBusy(true);
+    prog = 0; start = Date.now();
+    footer('progress');
+    draw();
+    timer = setInterval(draw, 500);
+    const unlisten = await T.event.listen('progress', e => { prog = e.payload; });
+    try {
+      const p = PRESETS[sel];
+      await invoke('compress', { opts: {
+        input: src.path, output, mode: p.mode, codec: $('codec').value,
+        crf: p.crf || 0, target_mb: sel === 'target' ? tmb : 0,
+        height: ll ? 0 : +$('res').value
+      } });
+      outPath = output;
+      const o = await invoke('probe', { path: output });
+      const d = Math.round((o.size / src.size - 1) * 100);
+      $('resText').textContent = `${fmtMB(o.size)} · ${d <= 0 ? (-d) + '% smaller' : d + '% larger'} · ${fmtDur((Date.now() - start) / 1000)}`;
+      footer('result');
+    } catch (e) {
+      footer('idle');
+      if (String(e) !== 'Cancelled') showError(e);
+    } finally {
+      clearInterval(timer);
+      unlisten();
+      setBusy(false);
+    }
+  }
+
+  grid.addEventListener('click', e => {
+    const c = e.target.closest('.preset');
+    if (c) select(c.dataset.id);
+  });
+  grid.addEventListener('keydown', e => {
+    if (e.target.classList.contains('preset') && (e.key === 'Enter' || e.key === ' ')) {
+      e.preventDefault();
+      select(e.target.dataset.id);
+    }
+  });
+  grid.addEventListener('input', e => { if (e.target.id === 'tmb') renderCards(); });
+  $('res').addEventListener('change', renderCards);
+  $('dropzone').addEventListener('click', browse);
+  $('dropzone').addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') browse(); });
+  $('change').addEventListener('click', browse);
+  $('go').addEventListener('click', run);
+  $('cancel').addEventListener('click', () => invoke('cancel').catch(showError));
+  $('reveal').addEventListener('click', () => T.opener.revealItemInDir(outPath).catch(showError));
+
+  T.webview.getCurrentWebview().onDragDropEvent(e => {
+    const p = e.payload;
+    $('dropzone').classList.toggle('over', p.type === 'enter' || p.type === 'over');
+    if (p.type === 'drop' && p.paths && p.paths[0]) load(p.paths[0]);
+  });
+
+  select(sel);
+})();
+</script>
+</body>
+</html>
