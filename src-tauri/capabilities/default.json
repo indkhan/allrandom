@@ -1,5 +1,14 @@
 {
   "identifier": "default",
-  "windows": ["main"],
-  "permissions": ["core:default", "dialog:default", "opener:default", "opener:allow-reveal-item-in-dir"]
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "core:default",
+    "dialog:default",
+    "opener:default",
+    "opener:allow-reveal-item-in-dir",
+    "updater:default",
+    "process:allow-restart"
+  ]
 }

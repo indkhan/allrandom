@@ -13,6 +13,10 @@
     <h1>All</h1>
     <span class="sub">Pick a tool</span>
   </header>
+  <section id="update" class="tool hidden">
+    <div style="flex:1"><div class="pname" id="upTitle"></div><div class="pdesc" id="upDesc">Installs and restarts the app</div></div>
+    <button id="upBtn" class="primary">Update</button>
+  </section>
   <nav class="tools">
     <a class="tool" href="squeeze.html">
       <div class="thumb"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="3" y="5" width="13" height="14" rx="2"/><path d="m16 10 5-3v10l-5-3z"/></svg></div>
@@ -28,5 +32,20 @@
     </a>
   </nav>
 </div></main>
+<script>
+(async () => {
+  const T = window.__TAURI__, $ = id => document.getElementById(id);
+  let u;
+  try { u = await T.updater.check(); } catch { return; } // offline, or a .deb/dev build
+  if (!u) return;
+  $('upTitle').textContent = `Update available: v${u.version}`;
+  $('update').classList.remove('hidden');
+  $('upBtn').onclick = async () => {
+    $('upBtn').disabled = true; $('upBtn').textContent = 'Updating…';
+    try { await u.downloadAndInstall(); await T.process.relaunch(); }
+    catch (e) { $('upDesc').textContent = String(e); $('upBtn').disabled = false; $('upBtn').textContent = 'Retry'; }
+  };
+})();
+</script>
 </body>
 </html>

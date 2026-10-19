@@ -1,18 +1,55 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "All",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "identifier": "com.indkhan.all",
-  "build": { "frontendDist": "../src" },
+  "build": {
+    "frontendDist": "../src"
+  },
   "app": {
     "withGlobalTauri": true,
-    "windows": [{ "title": "All", "width": 760, "height": 700, "minWidth": 560, "minHeight": 560 }],
-    "security": { "csp": null }
+    "windows": [
+      {
+        "title": "All",
+        "width": 760,
+        "height": 700,
+        "minWidth": 560,
+        "minHeight": 560
+      }
+    ],
+    "security": {
+      "csp": null
+    }
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis", "msi", "deb", "appimage", "dmg"],
-    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"],
-    "externalBin": ["binaries/ffmpeg"]
+    "targets": [
+      "nsis",
+      "msi",
+      "appimage",
+      "dmg"
+    ],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "externalBin": [
+      "binaries/ffmpeg"
+    ],
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEVCRTY3QjQyNzY3N0E5NkIKUldScnFYZDJRbnZtNjdCVGJiVER1VUsrQ2RLcEFXTStJdGoxTlovcEs3U1l5ZTVwdjBCNlZ1NUEK",
+      "endpoints": [
+        "https://github.com/indkhan/allrandom/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }

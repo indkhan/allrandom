@@ -261,6 +261,8 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .manage(Job::default())
         .invoke_handler(tauri::generate_handler![probe, compress, cancel, zip_files, read_file, write_file])
         .run(tauri::generate_context!())

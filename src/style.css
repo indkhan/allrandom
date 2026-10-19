@@ -70,6 +70,7 @@ footer{border-top:1px solid var(--border);background:var(--panel);padding:14px 2
 .back{color:var(--muted);text-decoration:none;font-size:18px;width:28px;height:28px;display:grid;place-items:center;border-radius:8px}
 .back:hover{background:var(--panel2);color:var(--text)}
 .tools{display:grid;gap:12px}
+#update{border-color:var(--accent)}
 .tool{display:flex;align-items:center;gap:14px;background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:18px;color:inherit;text-decoration:none;box-shadow:var(--shadow);transition:border-color .15s,background .15s}
 .tool:hover,.tool:focus-visible{border-color:var(--accent);background:var(--accent-soft);outline:none}
 #list{display:flex;flex-direction:column;gap:6px}
