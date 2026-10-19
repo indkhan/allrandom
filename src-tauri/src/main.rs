@@ -182,6 +182,44 @@ fn cancel(job: State<Job>) {
     }
 }
 
+fn add_to_zip<W: std::io::Write + std::io::Seek>(zw: &mut zip::ZipWriter<W>, path: &std::path::Path, name: &str) -> std::io::Result<()> {
+    let opts = zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+    if path.is_dir() {
+        zw.add_directory(format!("{name}/"), opts)?;
+        for e in std::fs::read_dir(path)? {
+            let e = e?;
+            add_to_zip(zw, &e.path(), &format!("{name}/{}", e.file_name().to_string_lossy()))?;
+        }
+    } else {
+        let big = path.metadata()?.len() >= 0xFFFF_FFFF;
+        zw.start_file(name, opts.large_file(big))?;
+        std::io::copy(&mut std::fs::File::open(path)?, zw)?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn zip_files(paths: Vec<String>, output: String) -> Result<u64, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let r = (|| {
+            let mut zw = zip::ZipWriter::new(std::fs::File::create(&output)?);
+            for p in &paths {
+                let p = std::path::Path::new(p);
+                let name = p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+                add_to_zip(&mut zw, p, &name)?;
+            }
+            zw.finish()?;
+            std::fs::metadata(&output).map(|m| m.len())
+        })();
+        if r.is_err() {
+            let _ = std::fs::remove_file(&output);
+        }
+        r.map_err(|e: std::io::Error| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 use tauri::Manager;
 
 fn main() {
@@ -189,7 +227,7 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .manage(Job::default())
-        .invoke_handler(tauri::generate_handler![probe, compress, cancel])
+        .invoke_handler(tauri::generate_handler![probe, compress, cancel, zip_files])
         .run(tauri::generate_context!())
         .expect("failed to start");
 }
@@ -234,3 +272,26 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+mod zip_tests {
+    #[test]
+    fn zips_files_and_folders() {
+        let dir = std::env::temp_dir().join("all_zip_test");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("folder/sub")).unwrap();
+        std::fs::write(dir.join("a.txt"), "aaaa".repeat(1000)).unwrap();
+        std::fs::write(dir.join("folder/sub/b.txt"), "b").unwrap();
+        let out = dir.join("out.zip");
+        let mut zw = zip::ZipWriter::new(std::fs::File::create(&out).unwrap());
+        super::add_to_zip(&mut zw, &dir.join("a.txt"), "a.txt").unwrap();
+        super::add_to_zip(&mut zw, &dir.join("folder"), "folder").unwrap();
+        zw.finish().unwrap();
+        let z = zip::ZipArchive::new(std::fs::File::open(&out).unwrap()).unwrap();
+        let mut names: Vec<_> = z.file_names().map(|n| n.unwrap().to_string()).collect();
+        names.sort();
+        assert_eq!(names, ["a.txt", "folder/", "folder/sub/", "folder/sub/b.txt"]);
+        assert!(std::fs::metadata(&out).unwrap().len() < 4000);
+    }
+}
+

@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Compress files · All</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main><div class="wrap">
+  <header>
+    <a class="back" href="index.html" aria-label="Back">&larr;</a>
+    <h1>Compress files</h1>
+    <span class="sub">Files and folders → .zip</span>
+  </header>
+  <section id="dropzone" tabindex="0" role="button" aria-label="Add files">
+    <div class="dz-title">Drop files or folders here</div>
+    <div class="dz-sub">or click to add files · <a href="#" id="addDir">add a folder</a></div>
+  </section>
+  <section id="list"></section>
+  <div id="error" class="error hidden" role="alert"></div>
+</div></main>
+<footer>
+  <div class="foot">
+    <div class="status"><div id="idle">Add something to compress</div></div>
+    <button id="reveal" class="hidden">Show in folder</button>
+    <button id="go" class="primary" disabled>Create zip</button>
+  </div>
+</footer>
+<script src="list.js"></script>
+<script>
+(() => {
+  const T = window.__TAURI__, $ = id => document.getElementById(id);
+  let out = null;
+  const fmt = b => b >= 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.ceil(b / 1024) + ' KB';
+  const err = e => { $('error').textContent = String(e?.message || e); $('error').classList.remove('hidden'); };
+  const list = fileList($('list'), items => {
+    $('go').disabled = !items.length;
+    $('idle').textContent = items.length ? `${items.length} item(s)` : 'Add something to compress';
+  });
+  const pick = async directory => {
+    try {
+      const r = await T.dialog.open({ multiple: true, directory });
+      if (r) list.add([].concat(r));
+    } catch (e) { err(e); }
+  };
+  $('dropzone').addEventListener('click', e => { if (e.target.id !== 'addDir') pick(false); });
+  $('dropzone').addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') pick(false); });
+  $('addDir').addEventListener('click', e => { e.preventDefault(); pick(true); });
+  $('go').addEventListener('click', async () => {
+    $('error').classList.add('hidden');
+    const first = list.items[0], name = list.items.length === 1 ? first.replace(/\.[^\/.]+$/, '') : first.replace(/[^\/]+$/, '') + 'archive';
+    const output = await T.dialog.save({ defaultPath: name + '.zip', filters: [{ name: 'Zip', extensions: ['zip'] }] }).catch(err);
+    if (!output) return;
+    $('go').disabled = true; $('go').textContent = 'Compressing…';
+    try {
+      const size = await T.core.invoke('zip_files', { paths: list.items, output });
+      out = output;
+      $('idle').textContent = `Done · ${fmt(size)}`;
+      $('reveal').classList.remove('hidden');
+    } catch (e) { err(e); }
+    $('go').disabled = false; $('go').textContent = 'Create zip';
+  });
+  $('reveal').addEventListener('click', () => T.opener.revealItemInDir(out).catch(err));
+  T.webview.getCurrentWebview().onDragDropEvent(e => {
+    const p = e.payload;
+    $('dropzone').classList.toggle('over', p.type === 'enter' || p.type === 'over');
+    if (p.type === 'drop' && p.paths) list.add(p.paths);
+  });
+})();
+</script>
+</body>
+</html>
