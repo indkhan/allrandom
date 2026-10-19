@@ -1,4 +1,4 @@
-# Squeeze
+# All
 
 Small desktop video compressor (Tauri + Rust, bundled ffmpeg). Windows first; builds on Linux/macOS too.
 
