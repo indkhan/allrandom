@@ -31,13 +31,13 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
           mkdir -p src-tauri/binaries
-          curl -fsSL https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz | tar -xJ --wildcards --strip-components=1 -C /tmp '*/ffmpeg'
+          curl -fsSL --retry 3 https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz | tar -xJ --wildcards --strip-components=2 -C /tmp '*/bin/ffmpeg'
           mv /tmp/ffmpeg src-tauri/binaries/ffmpeg-x86_64-unknown-linux-gnu
       - name: macOS ffmpeg
         if: runner.os == 'macOS'
         run: |
           mkdir -p src-tauri/binaries
-          curl -fsSL -o /tmp/ff.zip https://ffmpeg.martin-riedl.de/redirect/latest/macos/arm64/release/ffmpeg.zip
+          curl -fsSL --retry 3 -o /tmp/ff.zip https://ffmpeg.martin-riedl.de/redirect/latest/macos/arm64/release/ffmpeg.zip
           unzip -o /tmp/ff.zip -d /tmp/ff
           mv /tmp/ff/ffmpeg src-tauri/binaries/ffmpeg-aarch64-apple-darwin
           chmod +x src-tauri/binaries/ffmpeg-aarch64-apple-darwin
