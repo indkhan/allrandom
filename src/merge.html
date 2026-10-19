@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Merge · All</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main><div class="wrap">
+  <header>
+    <a class="back" href="index.html" aria-label="Back">&larr;</a>
+    <h1>Merge</h1>
+    <span class="sub">PDFs and images → one PDF</span>
+  </header>
+  <section id="dropzone" tabindex="0" role="button" aria-label="Add files">
+    <div class="dz-title">Drop PDFs or images here</div>
+    <div class="dz-sub">or click to browse · PDF, JPG, PNG, WebP, GIF, BMP · reorder below</div>
+  </section>
+  <section id="list"></section>
+  <div id="error" class="error hidden" role="alert"></div>
+</div></main>
+<footer>
+  <div class="foot">
+    <div class="status"><div id="idle">Add at least one file</div></div>
+    <button id="reveal" class="hidden">Show in folder</button>
+    <button id="go" class="primary" disabled>Merge to PDF</button>
+  </div>
+</footer>
+<script src="vendor/pdf-lib.min.js"></script>
+<script src="list.js"></script>
+<script>
+(() => {
+  const T = window.__TAURI__, $ = id => document.getElementById(id), { PDFDocument } = PDFLib;
+  const EXT = ['pdf', 'jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp'];
+  const ext = p => p.split('.').pop().toLowerCase();
+  let out = null;
+  const err = e => { $('error').textContent = String(e?.message || e); $('error').classList.remove('hidden'); };
+  const list = fileList($('list'), items => {
+    $('go').disabled = !items.length;
+    $('idle').textContent = items.length ? `${items.length} file(s), merged top to bottom` : 'Add at least one file';
+  });
+  const add = paths => {
+    const ok = paths.filter(p => EXT.includes(ext(p)));
+    if (ok.length < paths.length) err('Skipped unsupported files (PDF and images only).');
+    list.add(ok);
+  };
+  const read = async p => new Uint8Array(await T.core.invoke('read_file', { path: p }));
+  // pdf-lib only embeds JPG/PNG; other formats are re-encoded to PNG via canvas
+  async function toPng(bytes) {
+    const bmp = await createImageBitmap(new Blob([bytes]));
+    const c = document.createElement('canvas'); c.width = bmp.width; c.height = bmp.height;
+    c.getContext('2d').drawImage(bmp, 0, 0);
+    return new Uint8Array(await (await new Promise(r => c.toBlob(r, 'image/png'))).arrayBuffer());
+  }
+  async function merge(paths) {
+    const doc = await PDFDocument.create();
+    for (const p of paths) {
+      const bytes = await read(p), e = ext(p);
+      if (e === 'pdf') {
+        const src = await PDFDocument.load(bytes, { ignoreEncryption: true });
+        (await doc.copyPages(src, src.getPageIndices())).forEach(pg => doc.addPage(pg));
+      } else {
+        const img = e === 'png' ? await doc.embedPng(bytes) : (e === 'jpg' || e === 'jpeg') ? await doc.embedJpg(bytes) : await doc.embedPng(await toPng(bytes));
+        doc.addPage([img.width, img.height]).drawImage(img, { x: 0, y: 0, width: img.width, height: img.height });
+      }
+    }
+    return doc.save();
+  }
+  const pick = async () => {
+    try {
+      const r = await T.dialog.open({ multiple: true, filters: [{ name: 'PDF or image', extensions: EXT }] });
+      if (r) add([].concat(r));
+    } catch (e) { err(e); }
+  };
+  $('dropzone').addEventListener('click', pick);
+  $('dropzone').addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') pick(); });
+  $('go').addEventListener('click', async () => {
+    $('error').classList.add('hidden');
+    const output = await T.dialog.save({ defaultPath: list.items[0].replace(/[^\/]+$/, '') + 'merged.pdf', filters: [{ name: 'PDF', extensions: ['pdf'] }] }).catch(err);
+    if (!output) return;
+    $('go').disabled = true; $('go').textContent = 'Merging…';
+    try {
+      const pdf = await merge(list.items);
+      await T.core.invoke('write_file', pdf, { headers: { path: encodeURIComponent(output) } });
+      out = output;
+      $('idle').textContent = `Done · ${(pdf.length / 1048576).toFixed(1)} MB`;
+      $('reveal').classList.remove('hidden');
+    } catch (e) { err(e); }
+    $('go').disabled = false; $('go').textContent = 'Merge to PDF';
+  });
+  $('reveal').addEventListener('click', () => T.opener.revealItemInDir(out).catch(err));
+  T.webview.getCurrentWebview().onDragDropEvent(e => {
+    const p = e.payload;
+    $('dropzone').classList.toggle('over', p.type === 'enter' || p.type === 'over');
+    if (p.type === 'drop' && p.paths) add(p.paths);
+  });
+})();
+</script>
+</body>
+</html>

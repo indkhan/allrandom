@@ -220,6 +220,41 @@ async fn zip_files(paths: Vec<String>, output: String) -> Result<u64, String> {
     .map_err(|e| e.to_string())?
 }
 
+// Raw bytes in/out for the Merge tool (pdf-lib runs in the webview).
+#[tauri::command]
+fn read_file(path: String) -> Result<tauri::ipc::Response, String> {
+    std::fs::read(path).map(tauri::ipc::Response::new).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn write_file(req: tauri::ipc::Request) -> Result<(), String> {
+    let path = req.headers().get("path").and_then(|v| v.to_str().ok()).ok_or("missing path")?;
+    let path = percent_decode(path);
+    match req.body() {
+        tauri::ipc::InvokeBody::Raw(b) => std::fs::write(path, b).map_err(|e| e.to_string()),
+        _ => Err("expected raw body".into()),
+    }
+}
+
+// headers are ASCII-only, so the frontend sends encodeURIComponent(path)
+fn percent_decode(s: &str) -> String {
+    let b = s.as_bytes();
+    let mut out = Vec::with_capacity(b.len());
+    let mut i = 0;
+    while i < b.len() {
+        if b[i] == b'%' && i + 2 < b.len() {
+            if let Ok(v) = u8::from_str_radix(&s[i + 1..i + 3], 16) {
+                out.push(v);
+                i += 3;
+                continue;
+            }
+        }
+        out.push(b[i]);
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
 use tauri::Manager;
 
 fn main() {
@@ -227,7 +262,7 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .manage(Job::default())
-        .invoke_handler(tauri::generate_handler![probe, compress, cancel, zip_files])
+        .invoke_handler(tauri::generate_handler![probe, compress, cancel, zip_files, read_file, write_file])
         .run(tauri::generate_context!())
         .expect("failed to start");
 }
@@ -295,3 +330,8 @@ mod zip_tests {
     }
 }
 
+#[test]
+fn decodes_percent_paths() {
+    assert_eq!(percent_decode("C%3A%5Cm%C3%BCde%20x.pdf"), r"C:\müde x.pdf");
+    assert_eq!(percent_decode("a%2"), "a%2");
+}
