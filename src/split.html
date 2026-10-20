@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Split · All</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main><div class="wrap">
+  <header>
+    <a class="back" href="index.html" aria-label="Back">&larr;</a>
+    <h1>Split</h1>
+    <span class="sub">PDF → pages</span>
+  </header>
+  <section id="dropzone" tabindex="0" role="button" aria-label="Choose PDF">
+    <div class="dz-title">Drop a PDF here</div>
+    <div class="dz-sub">or click to browse</div>
+  </section>
+  <label class="tgt">Pages <input id="pages" placeholder="e.g. 1-3, 5 · empty = every page as its own file" style="width:320px"></label>
+  <div id="error" class="error hidden" role="alert"></div>
+</div></main>
+<footer>
+  <div class="foot">
+    <div class="status"><div id="idle">Choose a PDF</div></div>
+    <button id="reveal" class="hidden">Show in folder</button>
+    <button id="go" class="primary" disabled>Split PDF</button>
+  </div>
+</footer>
+<script src="vendor/pdf-lib.min.js"></script>
+<script>
+(() => {
+  const T = window.__TAURI__, $ = id => document.getElementById(id), { PDFDocument } = PDFLib;
+  let src = null, path = null, out = null;
+  const err = e => { $('error').textContent = String(e?.message || e); $('error').classList.remove('hidden'); };
+  // "1-3, 5" -> [0, 1, 2, 4]
+  const parse = (s, n) => s.split(',').filter(x => x.trim()).flatMap(r => {
+    const [a, b = a] = r.split('-').map(Number);
+    if (!(a >= 1 && b >= a && b <= n)) throw new Error(`Invalid range "${r.trim()}" (1–${n})`);
+    return Array.from({ length: b - a + 1 }, (_, i) => a - 1 + i);
+  });
+  const extract = async idx => {
+    const doc = await PDFDocument.create();
+    (await doc.copyPages(src, idx)).forEach(pg => doc.addPage(pg));
+    return doc.save();
+  };
+  const write = (p, bytes) => T.core.invoke('write_file', bytes, { headers: { path: encodeURIComponent(p) } });
+  async function load(p) {
+    if (!p.toLowerCase().endsWith('.pdf')) return err('Only PDF files are supported.');
+    $('error').classList.add('hidden');
+    try {
+      src = await PDFDocument.load(new Uint8Array(await T.core.invoke('read_file', { path: p })), { ignoreEncryption: true });
+      path = p;
+      $('idle').textContent = `${p.split(/[\\/]/).pop()} · ${src.getPageCount()} page(s)`;
+      $('go').disabled = false;
+    } catch (e) { err(e); }
+  }
+  const pick = async () => {
+    try {
+      const r = await T.dialog.open({ filters: [{ name: 'PDF', extensions: ['pdf'] }] });
+      if (r) load(r);
+    } catch (e) { err(e); }
+  };
+  $('dropzone').addEventListener('click', pick);
+  $('dropzone').addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') pick(); });
+  $('go').addEventListener('click', async () => {
+    $('error').classList.add('hidden');
+    const dir = path.replace(/[^\\/]+$/, ''), base = path.split(/[\\/]/).pop().replace(/\.pdf$/i, '');
+    try {
+      const idx = parse($('pages').value, src.getPageCount());
+      // ranges: one PDF; empty: one file per page into a chosen folder
+      const target = idx.length
+        ? await T.dialog.save({ defaultPath: `${dir}${base}-pages.pdf`, filters: [{ name: 'PDF', extensions: ['pdf'] }] })
+        : await T.dialog.open({ directory: true, defaultPath: dir });
+      if (!target) return;
+      $('go').disabled = true; $('go').textContent = 'Splitting…';
+      if (idx.length) await write(out = target, await extract(idx));
+      else for (const i of src.getPageIndices()) await write(out = `${target}/${base}-${i + 1}.pdf`, await extract([i]));
+      $('idle').textContent = `Done · ${idx.length ? '1 file' : src.getPageCount() + ' files'}`;
+      $('reveal').classList.remove('hidden');
+    } catch (e) { err(e); }
+    $('go').disabled = false; $('go').textContent = 'Split PDF';
+  });
+  $('reveal').addEventListener('click', () => T.opener.revealItemInDir(out).catch(err));
+  T.webview.getCurrentWebview().onDragDropEvent(e => {
+    const p = e.payload;
+    $('dropzone').classList.toggle('over', p.type === 'enter' || p.type === 'over');
+    if (p.type === 'drop' && p.paths?.length) load(p.paths[0]);
+  });
+})();
+</script>
+</body>
+</html>
