@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Images · All</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main><div class="wrap">
+  <header>
+    <a class="back" href="index.html" aria-label="Back">&larr;</a>
+    <h1>Images</h1>
+    <span class="sub">Convert and resize images</span>
+  </header>
+  <section id="dropzone" tabindex="0" role="button" aria-label="Add images">
+    <div class="dz-title">Drop images here</div>
+    <div class="dz-sub">or click to browse · JPG, PNG, WebP, HEIC</div>
+  </section>
+  <section id="list"></section>
+  <section class="advanced">
+    <label>Format
+      <select id="fmt"><option value="jpg">JPG</option><option value="png">PNG</option><option value="webp">WebP</option></select>
+    </label>
+    <label>Max width
+      <input id="width" type="number" min="0" step="100" placeholder="Original">
+    </label>
+    <label>Quality
+      <input id="quality" type="number" min="1" max="100" value="85">
+    </label>
+  </section>
+  <div id="error" class="error hidden" role="alert" style="white-space:pre-line"></div>
+</div></main>
+<footer>
+  <div class="foot">
+    <div class="status"><div id="idle">Add images to convert</div></div>
+    <button id="reveal" class="hidden">Show in folder</button>
+    <button id="go" class="primary" disabled>Convert</button>
+  </div>
+</footer>
+<script src="list.js"></script>
+<script>
+(() => {
+  const T = window.__TAURI__, $ = id => document.getElementById(id);
+  let out = null;
+  const err = e => { $('error').textContent = String(e?.message || e); $('error').classList.remove('hidden'); };
+  const list = fileList($('list'), items => {
+    $('go').disabled = !items.length;
+    $('idle').textContent = items.length ? `${items.length} image(s)` : 'Add images to convert';
+  });
+  const pick = async () => {
+    try {
+      const r = await T.dialog.open({ multiple: true, filters: [{ name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'webp', 'heic', 'heif'] }] });
+      if (r) list.add([].concat(r));
+    } catch (e) { err(e); }
+  };
+  $('dropzone').addEventListener('click', pick);
+  $('dropzone').addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') pick(); });
+  $('go').addEventListener('click', async () => {
+    $('error').classList.add('hidden');
+    $('go').disabled = true;
+    const errors = [], items = [...list.items];
+    for (const [i, input] of items.entries()) {
+      $('idle').textContent = `Converting ${i + 1} of ${items.length}…`;
+      try {
+        out = await T.core.invoke('convert_image', { input, format: $('fmt').value, maxWidth: +$('width').value || 0, quality: +$('quality').value || 85 });
+      } catch (e) { errors.push(`${input.split(/[\\/]/).pop()}: ${e}`); }
+    }
+    $('idle').textContent = `Done · ${items.length - errors.length} of ${items.length} converted`;
+    if (errors.length) err(errors.join('\n'));
+    $('reveal').classList.toggle('hidden', !out);
+    $('go').disabled = false;
+  });
+  $('reveal').addEventListener('click', () => T.opener.revealItemInDir(out).catch(err));
+  T.webview.getCurrentWebview().onDragDropEvent(e => {
+    const p = e.payload;
+    $('dropzone').classList.toggle('over', p.type === 'enter' || p.type === 'over');
+    if (p.type === 'drop' && p.paths) list.add(p.paths);
+  });
+})();
+</script>
+</body>
+</html>

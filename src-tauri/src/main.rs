@@ -255,6 +255,42 @@ fn percent_decode(s: &str) -> String {
     String::from_utf8_lossy(&out).into_owned()
 }
 
+fn image_args(input: &str, output: &str, format: &str, max_width: u32, quality: u32) -> Vec<String> {
+    let mut a: Vec<String> = ["-y", "-hide_banner", "-loglevel", "error", "-i", input].map(String::from).to_vec();
+    if max_width > 0 {
+        a.extend(["-vf".into(), format!("scale=min({max_width}\\,iw):-1")]);
+    }
+    let q = quality.clamp(1, 100);
+    match format {
+        "jpg" => a.extend(["-q:v".into(), (31 - q * 29 / 100).to_string()]), // 2 best .. 31 worst
+        "webp" => a.extend(["-quality".into(), q.to_string()]),
+        _ => {}
+    }
+    a.extend(["-frames:v".into(), "1".into(), "-update".into(), "1".into(), output.into()]);
+    a
+}
+
+// Converts one image; returns the output path. Writes next to the original.
+#[tauri::command]
+async fn convert_image(input: String, format: String, max_width: u32, quality: u32) -> Result<String, String> {
+    let base = input.rsplit_once('.').map_or(input.as_str(), |(b, _)| b);
+    let mut output = format!("{base}.{format}");
+    if output == input {
+        output = format!("{base}_converted.{format}");
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        let out = ffmpeg().args(image_args(&input, &output, &format, max_width, quality)).output().map_err(|e| format!("ffmpeg not found: {e}"))?;
+        if out.status.success() {
+            return Ok(output);
+        }
+        let _ = std::fs::remove_file(&output);
+        let err = String::from_utf8_lossy(&out.stderr);
+        Err(err.lines().last().unwrap_or("ffmpeg failed").to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 use tauri::Manager;
 
 fn main() {
@@ -264,7 +300,7 @@ fn main() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .manage(Job::default())
-        .invoke_handler(tauri::generate_handler![probe, compress, cancel, zip_files, read_file, write_file])
+        .invoke_handler(tauri::generate_handler![probe, compress, cancel, zip_files, read_file, write_file, convert_image])
         .run(tauri::generate_context!())
         .expect("failed to start");
 }
@@ -336,4 +372,19 @@ mod zip_tests {
 fn decodes_percent_paths() {
     assert_eq!(percent_decode("C%3A%5Cm%C3%BCde%20x.pdf"), r"C:\müde x.pdf");
     assert_eq!(percent_decode("a%2"), "a%2");
+}
+
+#[test]
+fn converts_images() {
+    let dir = std::env::temp_dir().join("all_image_test");
+    std::fs::create_dir_all(&dir).unwrap();
+    let src = dir.join("src.png").to_string_lossy().to_string();
+    assert!(ffmpeg().args(["-y", "-f", "lavfi", "-i", "testsrc2=size=800x600", "-frames:v", "1", &src]).status().unwrap().success());
+    for f in ["jpg", "png", "webp"] {
+        let out = dir.join(format!("out.{f}")).to_string_lossy().to_string();
+        let st = ffmpeg().args(image_args(&src, &out, f, 400, 80)).output().unwrap();
+        assert!(st.status.success(), "{f}: {}", String::from_utf8_lossy(&st.stderr));
+        let st = ffmpeg().args(["-hide_banner", "-i", &out]).output().unwrap();
+        assert!(String::from_utf8_lossy(&st.stderr).contains("400x300"), "{f}");
+    }
 }
