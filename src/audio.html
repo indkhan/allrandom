@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Audio · All</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main><div class="wrap">
+  <header>
+    <a class="back" href="index.html" aria-label="Back">&larr;</a>
+    <h1>Audio</h1>
+    <span class="sub">Audio or video → MP3, WAV, M4A</span>
+  </header>
+  <section id="dropzone" tabindex="0" role="button" aria-label="Add files">
+    <div class="dz-title">Drop audio or video files here</div>
+    <div class="dz-sub">or click to browse · saved next to the originals</div>
+  </section>
+  <section id="list"></section>
+  <section class="advanced">
+    <label>Format
+      <select id="fmt">
+        <option value="mp3">MP3</option>
+        <option value="m4a">M4A (AAC)</option>
+        <option value="wav">WAV · lossless</option>
+      </select>
+    </label>
+    <label>Bitrate
+      <select id="kbps">
+        <option value="128">128 kbps</option>
+        <option value="192" selected>192 kbps</option>
+        <option value="256">256 kbps</option>
+        <option value="320">320 kbps</option>
+      </select>
+    </label>
+  </section>
+  <div id="error" class="error hidden" role="alert"></div>
+</div></main>
+<footer>
+  <div class="foot">
+    <div class="status"><div id="idle">Add files to convert</div></div>
+    <button id="reveal" class="hidden">Show in folder</button>
+    <button id="go" class="primary" disabled>Convert</button>
+  </div>
+</footer>
+<script src="list.js"></script>
+<script>
+(() => {
+  const T = window.__TAURI__, $ = id => document.getElementById(id);
+  let out = null;
+  const err = e => { $('error').textContent = String(e?.message || e); $('error').classList.remove('hidden'); };
+  const list = fileList($('list'), items => {
+    $('go').disabled = !items.length;
+    $('idle').textContent = items.length ? `${items.length} file(s)` : 'Add files to convert';
+  });
+  const pick = async () => {
+    try { const r = await T.dialog.open({ multiple: true }); if (r) list.add([].concat(r)); } catch (e) { err(e); }
+  };
+  $('fmt').addEventListener('change', () => { $('kbps').disabled = $('fmt').value === 'wav'; });
+  $('dropzone').addEventListener('click', pick);
+  $('dropzone').addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') pick(); });
+  $('go').addEventListener('click', async () => {
+    $('error').classList.add('hidden'); $('reveal').classList.add('hidden');
+    $('go').disabled = true;
+    const items = [...list.items], failed = [];
+    for (const [i, input] of items.entries()) {
+      $('go').textContent = `Converting ${i + 1}/${items.length}…`;
+      try { out = await T.core.invoke('convert_audio', { input, format: $('fmt').value, kbps: +$('kbps').value }); }
+      catch (e) { failed.push(input.split(/[\\/]/).pop() + ': ' + e); }
+    }
+    if (failed.length) err(failed.join('\n'));
+    $('idle').textContent = `Done · ${items.length - failed.length} of ${items.length} converted`;
+    if (out) $('reveal').classList.remove('hidden');
+    $('go').disabled = false; $('go').textContent = 'Convert';
+  });
+  $('reveal').addEventListener('click', () => T.opener.revealItemInDir(out).catch(err));
+  T.webview.getCurrentWebview().onDragDropEvent(e => {
+    const p = e.payload;
+    $('dropzone').classList.toggle('over', p.type === 'enter' || p.type === 'over');
+    if (p.type === 'drop' && p.paths) list.add(p.paths);
+  });
+})();
+</script>
+</body>
+</html>

@@ -23,15 +23,23 @@ struct Info {
     codec: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Default)]
 struct Opts {
     input: String,
     output: String,
-    mode: String, // "crf" | "target" | "lossless"
+    mode: String, // "crf" | "target" | "lossless" | "trim" | "gif"
     codec: String, // "h264" | "h265"
     crf: u32,
     target_mb: f64,
     height: u32, // 0 = keep
+    #[serde(default)]
+    start: f64,
+    #[serde(default)]
+    end: f64, // 0 = whole clip
+    #[serde(default)]
+    fps: u32,
+    #[serde(default)]
+    width: u32, // gif width
 }
 
 // Bundled sidecar sits next to our exe; fall back to ffmpeg on PATH.
@@ -75,9 +83,11 @@ fn probe(path: String) -> Result<Info, String> {
 
 fn build_passes(o: &Opts, duration: f64) -> Vec<Vec<String>> {
     let enc = if o.codec == "h265" { "libx265" } else { "libx264" };
-    let mut base: Vec<String> = ["-y", "-hide_banner", "-nostats", "-progress", "pipe:1", "-i", &o.input]
-        .map(String::from)
-        .to_vec();
+    let mut base: Vec<String> = ["-y", "-hide_banner", "-nostats", "-progress", "pipe:1"].map(String::from).to_vec();
+    if o.end > 0.0 {
+        base.extend(["-ss".into(), o.start.to_string(), "-to".into(), o.end.to_string()]);
+    }
+    base.extend(["-i".into(), o.input.clone()]);
     if o.height > 0 {
         base.extend(["-vf".into(), format!("scale=-2:min({}\\,ih)", o.height)]);
     }
@@ -86,6 +96,11 @@ fn build_passes(o: &Opts, duration: f64) -> Vec<Vec<String>> {
     tail.extend(s(&["-pix_fmt", "yuv420p", "-movflags", "+faststart"]));
 
     match o.mode.as_str() {
+        "trim" => vec![[base, s(&["-map", "0", "-c", "copy", &o.output])].concat()],
+        "gif" => {
+            let vf = format!("fps={},scale={}:-1:flags=lanczos,split[a][b];[a]palettegen[p];[b][p]paletteuse", o.fps, o.width);
+            vec![[base, s(&["-vf", &vf, "-loop", "0", &o.output])].concat()]
+        }
         "lossless" => vec![[base, s(&["-c:v", "libx264", "-qp", "0", "-preset", "veryfast", "-c:a", "copy", &o.output])].concat()],
         "target" => {
             // total kbit budget over the clip, minus audio; 8388.608 = 1 MiB in kbit
@@ -116,7 +131,7 @@ fn build_passes(o: &Opts, duration: f64) -> Vec<Vec<String>> {
 }
 
 fn run(app: &AppHandle, job: &Job, o: &Opts) -> Result<String, String> {
-    let dur = probe(o.input.clone())?.duration.max(0.1);
+    let dur = if o.end > 0.0 { o.end - o.start } else { probe(o.input.clone())?.duration }.max(0.1);
     let passes = build_passes(o, dur);
     let n = passes.len() as f64;
     let workdir = std::env::temp_dir(); // two-pass stats files land here
@@ -255,6 +270,74 @@ fn percent_decode(s: &str) -> String {
     String::from_utf8_lossy(&out).into_owned()
 }
 
+// Audio tool: input -> sibling file with the new extension, never overwriting the input.
+fn audio_args(input: &str, format: &str, kbps: u32) -> (String, Vec<String>) {
+    let base = input.rsplit_once('.').filter(|(b, _)| !b.ends_with(['/', '\\'])).map_or(input, |(b, _)| b);
+    let mut output = format!("{base}.{format}");
+    if output == input {
+        output = format!("{base}_audio.{format}");
+    }
+    let b = format!("{kbps}k");
+    let codec: &[&str] = match format {
+        "wav" => &["-c:a", "pcm_s16le"],
+        "m4a" => &["-c:a", "aac", "-b:a", &b],
+        _ => &["-c:a", "libmp3lame", "-b:a", &b],
+    };
+    let args = [&["-y", "-hide_banner", "-i", input, "-vn"][..], codec, &[&output]].concat().iter().map(|s| s.to_string()).collect();
+    (output, args)
+}
+
+#[tauri::command]
+async fn convert_audio(input: String, format: String, kbps: u32) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let (output, args) = audio_args(&input, &format, kbps);
+        let out = ffmpeg().args(&args).output().map_err(|e| format!("ffmpeg not found: {e}"))?;
+        if out.status.success() {
+            return Ok(output);
+        }
+        let err = String::from_utf8_lossy(&out.stderr);
+        Err(err.lines().last().unwrap_or("ffmpeg failed").to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+fn image_args(input: &str, output: &str, format: &str, max_width: u32, quality: u32) -> Vec<String> {
+    let mut a: Vec<String> = ["-y", "-hide_banner", "-loglevel", "error", "-i", input].map(String::from).to_vec();
+    if max_width > 0 {
+        a.extend(["-vf".into(), format!("scale=min({max_width}\\,iw):-1")]);
+    }
+    let q = quality.clamp(1, 100);
+    match format {
+        "jpg" => a.extend(["-q:v".into(), (31 - q * 29 / 100).to_string()]), // 2 best .. 31 worst
+        "webp" => a.extend(["-quality".into(), q.to_string()]),
+        _ => {}
+    }
+    a.extend(["-frames:v".into(), "1".into(), "-update".into(), "1".into(), output.into()]);
+    a
+}
+
+// Converts one image; returns the output path. Writes next to the original.
+#[tauri::command]
+async fn convert_image(input: String, format: String, max_width: u32, quality: u32) -> Result<String, String> {
+    let base = input.rsplit_once('.').map_or(input.as_str(), |(b, _)| b);
+    let mut output = format!("{base}.{format}");
+    if output == input {
+        output = format!("{base}_converted.{format}");
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        let out = ffmpeg().args(image_args(&input, &output, &format, max_width, quality)).output().map_err(|e| format!("ffmpeg not found: {e}"))?;
+        if out.status.success() {
+            return Ok(output);
+        }
+        let _ = std::fs::remove_file(&output);
+        let err = String::from_utf8_lossy(&out.stderr);
+        Err(err.lines().last().unwrap_or("ffmpeg failed").to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 use tauri::Manager;
 
 fn main() {
@@ -264,7 +347,7 @@ fn main() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .manage(Job::default())
-        .invoke_handler(tauri::generate_handler![probe, compress, cancel, zip_files, read_file, write_file])
+        .invoke_handler(tauri::generate_handler![probe, compress, cancel, zip_files, read_file, write_file, convert_audio, convert_image])
         .run(tauri::generate_context!())
         .expect("failed to start");
 }
@@ -294,7 +377,7 @@ mod tests {
         let src_size = probe(src.clone()).unwrap().size;
         for (mode, codec, ext) in [("crf", "h264", "mp4"), ("crf", "h265", "mp4"), ("target", "h264", "mp4"), ("target", "h265", "mp4"), ("lossless", "h264", "mkv")] {
             let out = dir.join(format!("{mode}_{codec}.{ext}")).to_string_lossy().to_string();
-            let o = Opts { input: src.clone(), output: out.clone(), mode: mode.into(), codec: codec.into(), crf: 28, target_mb: 0.5, height: 480 };
+            let o = Opts { input: src.clone(), output: out.clone(), mode: mode.into(), codec: codec.into(), crf: 28, target_mb: 0.5, height: 480, ..Default::default() };
             for args in build_passes(&o, 6.0) {
                 let st = ffmpeg().args(&args).current_dir(&dir).output().unwrap();
                 assert!(st.status.success(), "{mode} {codec}: {}", String::from_utf8_lossy(&st.stderr));
@@ -306,6 +389,17 @@ mod tests {
                 assert!((0.35..=0.6).contains(&mb), "{codec} target 0.5MB got {mb}");
             }
             if mode == "crf" { assert!(i.size < src_size); }
+        }
+        for (mode, ext) in [("trim", "mp4"), ("gif", "gif")] {
+            let out = dir.join(format!("{mode}.{ext}")).to_string_lossy().to_string();
+            let o = Opts { input: src.clone(), output: out.clone(), mode: mode.into(), start: 1.0, end: 3.0, fps: 10, width: 320, ..Default::default() };
+            for args in build_passes(&o, 2.0) {
+                let st = ffmpeg().args(&args).output().unwrap();
+                assert!(st.status.success(), "{mode}: {}", String::from_utf8_lossy(&st.stderr));
+            }
+            let i = probe(out).unwrap();
+            assert!(i.duration > 1.5 && i.duration < 3.5, "{mode} {}", i.duration);
+            if mode == "gif" { assert_eq!(i.width, 320); }
         }
     }
 }
@@ -336,4 +430,32 @@ mod zip_tests {
 fn decodes_percent_paths() {
     assert_eq!(percent_decode("C%3A%5Cm%C3%BCde%20x.pdf"), r"C:\müde x.pdf");
     assert_eq!(percent_decode("a%2"), "a%2");
+}
+
+#[test]
+fn converts_audio() {
+    let dir = std::env::temp_dir().join("all_audio_test");
+    std::fs::create_dir_all(&dir).unwrap();
+    let src = dir.join("a.mp3").to_string_lossy().to_string();
+    assert!(ffmpeg().args(["-y", "-f", "lavfi", "-i", "sine=duration=1", &src]).status().unwrap().success());
+    for f in ["mp3", "wav", "m4a"] {
+        let (out, args) = audio_args(&src, f, 128);
+        assert_eq!(out, dir.join(if f == "mp3" { "a_audio.mp3".to_string() } else { format!("a.{f}") }).to_string_lossy());
+        assert!(ffmpeg().args(&args).status().unwrap().success(), "{f}");
+    }
+}
+
+#[test]
+fn converts_images() {
+    let dir = std::env::temp_dir().join("all_image_test");
+    std::fs::create_dir_all(&dir).unwrap();
+    let src = dir.join("src.png").to_string_lossy().to_string();
+    assert!(ffmpeg().args(["-y", "-f", "lavfi", "-i", "testsrc2=size=800x600", "-frames:v", "1", &src]).status().unwrap().success());
+    for f in ["jpg", "png", "webp"] {
+        let out = dir.join(format!("out.{f}")).to_string_lossy().to_string();
+        let st = ffmpeg().args(image_args(&src, &out, f, 400, 80)).output().unwrap();
+        assert!(st.status.success(), "{f}: {}", String::from_utf8_lossy(&st.stderr));
+        let st = ffmpeg().args(["-hide_banner", "-i", &out]).output().unwrap();
+        assert!(String::from_utf8_lossy(&st.stderr).contains("400x300"), "{f}");
+    }
 }

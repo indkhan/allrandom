@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Compress PDF · All</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main><div class="wrap">
+  <header>
+    <a class="back" href="index.html" aria-label="Back">&larr;</a>
+    <h1>Compress PDF</h1>
+    <span class="sub">Shrink the photos inside a PDF</span>
+  </header>
+  <section id="dropzone" tabindex="0" role="button" aria-label="Add a PDF">
+    <div class="dz-title">Drop a PDF here</div>
+    <div class="dz-sub">or click to browse · text and vectors are kept as is</div>
+  </section>
+  <section id="fileCard" class="hidden">
+    <div class="fileinfo"><div id="fName" class="name"></div><div id="fMeta" class="meta"></div></div>
+  </section>
+  <section class="advanced">
+    <label>Quality
+      <select id="q">
+        <option value="0.8,2400">High · light savings</option>
+        <option value="0.6,1600" selected>Medium</option>
+        <option value="0.4,1000">Low · smallest file</option>
+      </select>
+    </label>
+  </section>
+  <div id="error" class="error hidden" role="alert"></div>
+</div></main>
+<footer>
+  <div class="foot">
+    <div class="status"><div id="idle">Add a PDF</div></div>
+    <button id="reveal" class="hidden">Show in folder</button>
+    <button id="go" class="primary" disabled>Compress PDF</button>
+  </div>
+</footer>
+<script src="vendor/pdf-lib.min.js"></script>
+<script>
+(() => {
+  const T = window.__TAURI__, $ = id => document.getElementById(id), { PDFDocument, PDFName, PDFNumber, PDFRawStream } = PDFLib;
+  const mb = n => (n / 1048576).toFixed(1) + ' MB';
+  let src = null, bytes = null, out = null;
+  const err = e => { $('error').textContent = String(e?.message || e); $('error').classList.remove('hidden'); };
+  const set = async p => {
+    if (!/\.pdf$/i.test(p)) return err('Only PDF files are supported.');
+    $('error').classList.add('hidden'); $('reveal').classList.add('hidden');
+    src = p; bytes = new Uint8Array(await T.core.invoke('read_file', { path: p }));
+    $('fName').textContent = p.split(/[\\/]/).pop(); $('fMeta').textContent = mb(bytes.length);
+    $('fileCard').classList.remove('hidden'); $('go').disabled = false; $('idle').textContent = 'Ready';
+  };
+  // Re-encode every RGB/gray JPEG image smaller; keep the original when it doesn't shrink
+  async function shrink(input, q, max) {
+    const doc = await PDFDocument.load(input, { ignoreEncryption: true });
+    for (const [, s] of doc.context.enumerateIndirectObjects()) {
+      if (!(s instanceof PDFRawStream) || s.dict.get(PDFName.of('Filter')) !== PDFName.of('DCTDecode')) continue;
+      const cs = s.dict.get(PDFName.of('ColorSpace'));
+      if (cs !== PDFName.of('DeviceRGB') && cs !== PDFName.of('DeviceGray')) continue;
+      try {
+        const bmp = await createImageBitmap(new Blob([s.contents]));
+        const k = Math.min(1, max / Math.max(bmp.width, bmp.height));
+        const c = document.createElement('canvas'); c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+        c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+        const jpg = new Uint8Array(await (await new Promise(r => c.toBlob(r, 'image/jpeg', q))).arrayBuffer());
+        if (jpg.length >= s.contents.length) continue;
+        s.contents = jpg;
+        s.dict.set(PDFName.of('Width'), PDFNumber.of(c.width)); s.dict.set(PDFName.of('Height'), PDFNumber.of(c.height));
+        s.dict.set(PDFName.of('ColorSpace'), PDFName.of('DeviceRGB')); s.dict.set(PDFName.of('BitsPerComponent'), PDFNumber.of(8));
+        s.dict.delete(PDFName.of('DecodeParms')); s.dict.delete(PDFName.of('Decode'));
+      } catch {} // undecodable image: leave it
+    }
+    return doc.save({ useObjectStreams: true });
+  }
+  const pick = async () => {
+    try { const r = await T.dialog.open({ filters: [{ name: 'PDF', extensions: ['pdf'] }] }); if (r) await set(r); } catch (e) { err(e); }
+  };
+  $('dropzone').addEventListener('click', pick);
+  $('dropzone').addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') pick(); });
+  $('go').addEventListener('click', async () => {
+    $('error').classList.add('hidden');
+    const output = await T.dialog.save({ defaultPath: src.replace(/\.pdf$/i, '-small.pdf'), filters: [{ name: 'PDF', extensions: ['pdf'] }] }).catch(err);
+    if (!output) return;
+    $('go').disabled = true; $('go').textContent = 'Compressing…';
+    try {
+      const [q, max] = $('q').value.split(',').map(Number);
+      const pdf = await shrink(bytes, q, max);
+      await T.core.invoke('write_file', pdf, { headers: { path: encodeURIComponent(output) } });
+      out = output;
+      $('idle').textContent = `Done · ${mb(bytes.length)} → ${mb(pdf.length)} (${Math.round(100 - pdf.length / bytes.length * 100)}% smaller)`;
+      $('reveal').classList.remove('hidden');
+    } catch (e) { err(e); }
+    $('go').disabled = false; $('go').textContent = 'Compress PDF';
+  });
+  $('reveal').addEventListener('click', () => T.opener.revealItemInDir(out).catch(err));
+  T.webview.getCurrentWebview().onDragDropEvent(e => {
+    const p = e.payload;
+    $('dropzone').classList.toggle('over', p.type === 'enter' || p.type === 'over');
+    if (p.type === 'drop' && p.paths?.length) set(p.paths[0]).catch(err);
+  });
+})();
+</script>
+</body>
+</html>
