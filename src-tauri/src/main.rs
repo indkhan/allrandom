@@ -255,6 +255,38 @@ fn percent_decode(s: &str) -> String {
     String::from_utf8_lossy(&out).into_owned()
 }
 
+// Audio tool: input -> sibling file with the new extension, never overwriting the input.
+fn audio_args(input: &str, format: &str, kbps: u32) -> (String, Vec<String>) {
+    let base = input.rsplit_once('.').filter(|(b, _)| !b.ends_with(['/', '\\'])).map_or(input, |(b, _)| b);
+    let mut output = format!("{base}.{format}");
+    if output == input {
+        output = format!("{base}_audio.{format}");
+    }
+    let b = format!("{kbps}k");
+    let codec: &[&str] = match format {
+        "wav" => &["-c:a", "pcm_s16le"],
+        "m4a" => &["-c:a", "aac", "-b:a", &b],
+        _ => &["-c:a", "libmp3lame", "-b:a", &b],
+    };
+    let args = [&["-y", "-hide_banner", "-i", input, "-vn"][..], codec, &[&output]].concat().iter().map(|s| s.to_string()).collect();
+    (output, args)
+}
+
+#[tauri::command]
+async fn convert_audio(input: String, format: String, kbps: u32) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let (output, args) = audio_args(&input, &format, kbps);
+        let out = ffmpeg().args(&args).output().map_err(|e| format!("ffmpeg not found: {e}"))?;
+        if out.status.success() {
+            return Ok(output);
+        }
+        let err = String::from_utf8_lossy(&out.stderr);
+        Err(err.lines().last().unwrap_or("ffmpeg failed").to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 use tauri::Manager;
 
 fn main() {
@@ -264,7 +296,7 @@ fn main() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .manage(Job::default())
-        .invoke_handler(tauri::generate_handler![probe, compress, cancel, zip_files, read_file, write_file])
+        .invoke_handler(tauri::generate_handler![probe, compress, cancel, zip_files, read_file, write_file, convert_audio])
         .run(tauri::generate_context!())
         .expect("failed to start");
 }
@@ -336,4 +368,17 @@ mod zip_tests {
 fn decodes_percent_paths() {
     assert_eq!(percent_decode("C%3A%5Cm%C3%BCde%20x.pdf"), r"C:\müde x.pdf");
     assert_eq!(percent_decode("a%2"), "a%2");
+}
+
+#[test]
+fn converts_audio() {
+    let dir = std::env::temp_dir().join("all_audio_test");
+    std::fs::create_dir_all(&dir).unwrap();
+    let src = dir.join("a.mp3").to_string_lossy().to_string();
+    assert!(ffmpeg().args(["-y", "-f", "lavfi", "-i", "sine=duration=1", &src]).status().unwrap().success());
+    for f in ["mp3", "wav", "m4a"] {
+        let (out, args) = audio_args(&src, f, 128);
+        assert_eq!(out, dir.join(if f == "mp3" { "a_audio.mp3".to_string() } else { format!("a.{f}") }).to_string_lossy());
+        assert!(ffmpeg().args(&args).status().unwrap().success(), "{f}");
+    }
 }
