@@ -1,6 +1,6 @@
 # AGENTS.md
 
-All: a small Tauri 2 desktop toolbox (Rust backend, plain HTML/JS frontend, no bundler). Free, open source (MIT) and non-commercial: open-source licenses (GPL/AGPL included) are fine for dependencies and optional downloads.
+Ownkit: a small Tauri 2 desktop toolbox (Rust backend, plain HTML/JS frontend, no bundler). Free, open source (MIT) and non-commercial: open-source licenses (GPL/AGPL included) are fine for dependencies and optional downloads.
 
 ## Layout
 - `src/`: frontend, one HTML page per tool (`index.html` is the home screen, `squeeze.html`, `zip.html`, `merge.html`), shared `style.css` and `list.js`, vendored libraries in `src/vendor/`

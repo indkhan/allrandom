@@ -1,10 +1,15 @@
-# All
+# Ownkit
 
-Small desktop toolbox (Tauri + Rust). Open it and pick a tool:
+Free, open-source desktop toolbox (Tauri + Rust) for the little file jobs you keep googling for. Everything runs on your computer: no uploads, no accounts, no watermarks.
 
-- **Squeeze**: video compressor (bundled ffmpeg)
+- **Squeeze**: compress videos to a smaller size (bundled ffmpeg)
+- **Trim & GIF**: cut a clip or turn it into a GIF
 - **Compress files**: pack files and folders into a .zip
 - **Merge**: combine PDFs and images (JPG, PNG, WebP, GIF, BMP) into one PDF, in any order
+- **Split**: extract pages or ranges from a PDF
+- **Compress PDF**: shrink the images inside a PDF
+- **Audio**: convert audio or video to MP3, WAV or M4A
+- **Images**: convert and resize images
 
 ## Download
 
