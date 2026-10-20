@@ -3,15 +3,17 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>All</title>
+<title>Ownkit</title>
+<link rel="icon" href="favicon.svg">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <main><div class="wrap">
   <header>
-    <div class="logo"><svg width="14" height="14" viewBox="0 0 24 24" fill="#fff"><path d="M4 4h7v7H4zm9 0h7v7h-7zM4 13h7v7H4zm9 0h7v7h-7z"/></svg></div>
-    <h1>All</h1>
-    <span class="sub">Pick a tool</span>
+    <div class="logo"><svg width="14" height="14" viewBox="0 0 24 24" fill="#fff"><path d="M9 7.5V6a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 15 6v1.5" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/><path fill-rule="evenodd" d="M7 8h10a3 3 0 0 1 3 3v6a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3v-6a3 3 0 0 1 3-3Zm5 3a3 3 0 1 0 0 6 3 3 0 0 0 0-6Zm0 1.6a1.4 1.4 0 1 1 0 2.8 1.4 1.4 0 0 1 0-2.8Z"/></svg></div>
+    <h1>Ownkit</h1>
+    <input id="q" class="search" type="search" placeholder="Search tools" aria-label="Search tools" autofocus>
+    <button id="chk" class="icon" title="Check for updates" aria-label="Check for updates"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></svg></button>
   </header>
   <section id="update" class="tool hidden">
     <div style="flex:1"><div class="pname" id="upTitle"></div><div class="pdesc" id="upDesc">Installs and restarts the app</div></div>
@@ -50,19 +52,37 @@
   </nav>
 </div></main>
 <script>
-(async () => {
-  const T = window.__TAURI__, $ = id => document.getElementById(id);
+const T = window.__TAURI__, $ = id => document.getElementById(id);
+$('q').oninput = () => {
+  const q = $('q').value.trim().toLowerCase();
+  for (const t of document.querySelectorAll('.tool[href]')) t.classList.toggle('hidden', !t.textContent.toLowerCase().includes(q));
+};
+$('chk').onclick = () => check(true);
+check(false);
+
+async function check(manual) {
+  const b = $('chk');
+  b.disabled = true; b.title = 'Checking…';
   let u;
-  try { u = await T.updater.check(); } catch { return; } // offline, or a .deb/dev build
-  if (!u) return;
+  try { u = await T.updater.check(); } catch {} // offline, or a .deb/dev build
+  b.disabled = false; b.title = 'Check for updates';
+  if (!u) {
+    if (manual) {
+      $('upTitle').textContent = 'No update available'; $('upDesc').textContent = `Ownkit v${await T.app.getVersion()} is the latest version`;
+      $('upBtn').classList.add('hidden'); $('update').classList.remove('hidden');
+      setTimeout(() => $('update').classList.add('hidden'), 3000);
+    }
+    return;
+  }
   $('upTitle').textContent = `Update available: v${u.version}`;
-  $('update').classList.remove('hidden');
+  $('upDesc').textContent = 'Installs and restarts the app';
+  $('upBtn').classList.remove('hidden'); $('update').classList.remove('hidden');
   $('upBtn').onclick = async () => {
     $('upBtn').disabled = true; $('upBtn').textContent = 'Updating…';
     try { await u.downloadAndInstall(); await T.process.relaunch(); }
     catch (e) { $('upDesc').textContent = String(e); $('upBtn').disabled = false; $('upBtn').textContent = 'Retry'; }
   };
-})();
+}
 </script>
 </body>
 </html>

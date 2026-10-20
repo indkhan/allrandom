@@ -82,3 +82,5 @@ footer{border-top:1px solid var(--border);background:var(--panel);padding:14px 2
 :root[data-theme="light"]{color-scheme:light}
 :root[data-theme="dark"]{color-scheme:dark}
 *{scrollbar-width:thin;scrollbar-color:var(--border) transparent}
+.search{flex:1;margin-left:auto;max-width:260px;padding:7px 12px;border-radius:9px;border:1px solid var(--border);background:var(--panel)}
+button.icon{padding:7px;display:grid;place-items:center}
