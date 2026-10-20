@@ -23,15 +23,23 @@ struct Info {
     codec: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Default)]
 struct Opts {
     input: String,
     output: String,
-    mode: String, // "crf" | "target" | "lossless"
+    mode: String, // "crf" | "target" | "lossless" | "trim" | "gif"
     codec: String, // "h264" | "h265"
     crf: u32,
     target_mb: f64,
     height: u32, // 0 = keep
+    #[serde(default)]
+    start: f64,
+    #[serde(default)]
+    end: f64, // 0 = whole clip
+    #[serde(default)]
+    fps: u32,
+    #[serde(default)]
+    width: u32, // gif width
 }
 
 // Bundled sidecar sits next to our exe; fall back to ffmpeg on PATH.
@@ -75,9 +83,11 @@ fn probe(path: String) -> Result<Info, String> {
 
 fn build_passes(o: &Opts, duration: f64) -> Vec<Vec<String>> {
     let enc = if o.codec == "h265" { "libx265" } else { "libx264" };
-    let mut base: Vec<String> = ["-y", "-hide_banner", "-nostats", "-progress", "pipe:1", "-i", &o.input]
-        .map(String::from)
-        .to_vec();
+    let mut base: Vec<String> = ["-y", "-hide_banner", "-nostats", "-progress", "pipe:1"].map(String::from).to_vec();
+    if o.end > 0.0 {
+        base.extend(["-ss".into(), o.start.to_string(), "-to".into(), o.end.to_string()]);
+    }
+    base.extend(["-i".into(), o.input.clone()]);
     if o.height > 0 {
         base.extend(["-vf".into(), format!("scale=-2:min({}\\,ih)", o.height)]);
     }
@@ -86,6 +96,11 @@ fn build_passes(o: &Opts, duration: f64) -> Vec<Vec<String>> {
     tail.extend(s(&["-pix_fmt", "yuv420p", "-movflags", "+faststart"]));
 
     match o.mode.as_str() {
+        "trim" => vec![[base, s(&["-map", "0", "-c", "copy", &o.output])].concat()],
+        "gif" => {
+            let vf = format!("fps={},scale={}:-1:flags=lanczos,split[a][b];[a]palettegen[p];[b][p]paletteuse", o.fps, o.width);
+            vec![[base, s(&["-vf", &vf, "-loop", "0", &o.output])].concat()]
+        }
         "lossless" => vec![[base, s(&["-c:v", "libx264", "-qp", "0", "-preset", "veryfast", "-c:a", "copy", &o.output])].concat()],
         "target" => {
             // total kbit budget over the clip, minus audio; 8388.608 = 1 MiB in kbit
@@ -116,7 +131,7 @@ fn build_passes(o: &Opts, duration: f64) -> Vec<Vec<String>> {
 }
 
 fn run(app: &AppHandle, job: &Job, o: &Opts) -> Result<String, String> {
-    let dur = probe(o.input.clone())?.duration.max(0.1);
+    let dur = if o.end > 0.0 { o.end - o.start } else { probe(o.input.clone())?.duration }.max(0.1);
     let passes = build_passes(o, dur);
     let n = passes.len() as f64;
     let workdir = std::env::temp_dir(); // two-pass stats files land here
@@ -294,7 +309,7 @@ mod tests {
         let src_size = probe(src.clone()).unwrap().size;
         for (mode, codec, ext) in [("crf", "h264", "mp4"), ("crf", "h265", "mp4"), ("target", "h264", "mp4"), ("target", "h265", "mp4"), ("lossless", "h264", "mkv")] {
             let out = dir.join(format!("{mode}_{codec}.{ext}")).to_string_lossy().to_string();
-            let o = Opts { input: src.clone(), output: out.clone(), mode: mode.into(), codec: codec.into(), crf: 28, target_mb: 0.5, height: 480 };
+            let o = Opts { input: src.clone(), output: out.clone(), mode: mode.into(), codec: codec.into(), crf: 28, target_mb: 0.5, height: 480, ..Default::default() };
             for args in build_passes(&o, 6.0) {
                 let st = ffmpeg().args(&args).current_dir(&dir).output().unwrap();
                 assert!(st.status.success(), "{mode} {codec}: {}", String::from_utf8_lossy(&st.stderr));
@@ -306,6 +321,17 @@ mod tests {
                 assert!((0.35..=0.6).contains(&mb), "{codec} target 0.5MB got {mb}");
             }
             if mode == "crf" { assert!(i.size < src_size); }
+        }
+        for (mode, ext) in [("trim", "mp4"), ("gif", "gif")] {
+            let out = dir.join(format!("{mode}.{ext}")).to_string_lossy().to_string();
+            let o = Opts { input: src.clone(), output: out.clone(), mode: mode.into(), start: 1.0, end: 3.0, fps: 10, width: 320, ..Default::default() };
+            for args in build_passes(&o, 2.0) {
+                let st = ffmpeg().args(&args).output().unwrap();
+                assert!(st.status.success(), "{mode}: {}", String::from_utf8_lossy(&st.stderr));
+            }
+            let i = probe(out).unwrap();
+            assert!(i.duration > 1.5 && i.duration < 3.5, "{mode} {}", i.duration);
+            if mode == "gif" { assert_eq!(i.width, 320); }
         }
     }
 }
