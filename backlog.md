@@ -1,0 +1,1 @@
+Can we make it so that, for the files that are there in the file explorer, depending on whichever platform it is, if we right-click it, it shows you our thing as well: you can do this thing? For example, if I right-click on the video, it will show me, "Okay, I can compress it, I can do this, I can do that." 
